@@ -18,6 +18,8 @@
   --accent: #f59e0b;
   --accent-soft: #3b2c10;
   --danger: #f87171;
+  /* 深色下 accent 提亮为亮琥珀，白字对比度掉到约 1.9:1 不可读，改用深字压住 */
+  --text-on-accent: #1c1917;
 }
 
 /* 键盘可达性：焦点环（主题骨架一部分） */
@@ -116,5 +118,16 @@
 .shell-error-button.primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
+}
+
+/* ===== 画布反色（M2 计划 D8，默认关） ===== */
+/* 用法：查看器按 uiStore.canvasInvert 把此类挂到页面画布（.viewer-page-canvas / 缩略图画布）上。
+   invert(1) 翻转明度（白纸变深底），hue-rotate(180deg) 把色相转回原位，
+   避免彩色插图/图表被 invert 打成病态补色——两段滤镜叠加即「智能反色」的标准近似。
+   性能取舍：filter 会把画布送入离屏合成层，滚动/缩放每次重绘都要 GPU 重新过滤一遍，
+   大页高缩放下弱 GPU 会掉帧——因此产品决策为「设置项、默认关」（uiStore.canvasInvert 默认 false），
+   只反色画布本身、不套在文本层与高亮覆盖层上（它们透明，不受影响）。 */
+.canvas-invert {
+  filter: invert(1) hue-rotate(180deg);
 }

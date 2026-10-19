@@ -126,3 +126,38 @@
   color: var(--text-secondary);
   font-size: 13px;
 }
+
+/* ===== 打开被拒横幅（标签达到上限等；与会话错误态不同，不顶替文档视图） ===== */
+.viewer-rejection {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 12px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.viewer-rejection-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.viewer-rejection-dismiss {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 2px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.viewer-rejection-dismiss:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}

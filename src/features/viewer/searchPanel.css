@@ -1,0 +1,269 @@
+/* 搜索面板与命中覆盖层局部样式（模块 3，M2-计划 D4 / T4）。
+   颜色一律走 theme CSS 变量；.viewer-main-row 供 ViewerPage 的「滚动区 + 面板」
+   横向布局使用（主区内部布局，不动 shell 的右侧面板占位）。 */
+
+/* ===== 主区横向行：滚动舞台 + 可折叠搜索面板 ===== */
+.viewer-main-row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ===== 面板骨架 ===== */
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 300px;
+  min-height: 0;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+}
+
+.search-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.search-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.search-panel-count {
+  flex: 1;
+  min-width: 0;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ===== 输入行：关键词 + 大小写开关（M2-2） ===== */
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 8px 12px 4px;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.search-input:focus-visible {
+  outline-offset: 0;
+}
+
+.search-input:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+/* 大小写开关：文本型切换钮（图标库无语义贴切的现成项，Aa 即通用记号） */
+.search-toggle {
+  flex: none;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.search-toggle:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+
+.search-toggle-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ===== 范围开关：全文档 / 当前页（M2-2） ===== */
+.search-scope-row {
+  display: flex;
+  gap: 4px;
+  flex: none;
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-scope {
+  flex: 1;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-scope:hover:not(:disabled) {
+  background: var(--bg-subtle);
+}
+
+.search-scope-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ===== 索引进度（构建中可见，M2-1） ===== */
+.search-progress {
+  flex: none;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.search-progress-bar {
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+
+.search-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.15s ease-out;
+}
+
+/* ===== 结果列表 ===== */
+.search-results {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 0 12px;
+}
+
+.search-empty {
+  margin: 20px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.search-incomplete {
+  margin: 8px 12px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.search-group-title {
+  position: sticky;
+  top: 0;
+  margin: 0;
+  padding: 6px 12px 2px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.search-hit-item {
+  display: block;
+  width: 100%;
+  padding: 5px 12px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-hit-item:hover {
+  background: var(--bg-subtle);
+}
+
+.search-hit-item-active {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.search-excerpt {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.search-excerpt-mark {
+  color: var(--accent);
+  background: transparent;
+  font-weight: 600;
+}
+
+.search-hit-item-active .search-excerpt-mark {
+  background: var(--bg-panel);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* ===== 命中覆盖层（页项内，与画布/文本层同 viewport 的 CSS 矩形） =====
+   pointer-events:none —— 覆盖层只做标识，选词仍归文本层；z-index 压过文本层(2)。 */
+.search-hit-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.search-hit-rect {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.22;
+}
+
+.search-hit-rect-active {
+  opacity: 0.38;
+  box-shadow: 0 0 0 1px var(--accent);
+  /* 命中闪烁标识（M2-1）：点击结果后脉冲 3 次；key 含 flashToken 保证重放 */
+  animation: search-hit-flash 0.45s ease-in-out 3;
+}
+
+@keyframes search-hit-flash {
+  0%,
+  100% {
+    opacity: 0.38;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-hit-rect-active {
+    animation: none;
+  }
+}

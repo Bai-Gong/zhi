@@ -4,8 +4,17 @@
  * pdfjs-dist 只允许在本目录内 import（技术方案 4.3 规则 1），
  * 因此本出口不含任何 pdfjs 符号——渲染一律经 renderQueue / renderTextLayer。
  */
-export { useDocumentStore } from "./store";
-export type { DocumentStatus, DocumentSessionState, DocumentMeta, PageSize, OutlineNode } from "./store";
+export { useDocumentStore, activeTabOf, MAX_TABS } from "./store";
+export type {
+  DocumentStatus,
+  DocumentStoreState,
+  DocumentMeta,
+  PageSize,
+  OutlineNode,
+  TabSession,
+  Highlight,
+  HighlightRect,
+} from "./store";
 
 export { openDocument, closeDocument, pickPdfFile, getPage } from "./openDocument";
 

@@ -1,6 +1,6 @@
 import type { PDFPageProxy } from "pdfjs-dist";
 import { pdfjsLib } from "./pdfjs";
-import { useDocumentStore } from "./store";
+import { useDocumentStore, activeTabOf } from "./store";
 
 /**
  * 渲染任务队列（技术方案 5.2 第 6/7 条）：
@@ -10,7 +10,12 @@ import { useDocumentStore } from "./store";
  *   旧任务立即 cancel，落笔前再校验一次「仍是该画布最新一代」，杜绝旧结果
  *   覆盖新画面（串页）；
  * - 分辨率：物理像素 = viewport(scale) × devicePixelRatio，CSS 尺寸 = viewport(scale)；
- *   单边光栅上限 8192px（Chromium 上限 16384 留余量），超限自动封顶该页缩放。
+ *   单边光栅上限 8192px（Chromium 上限 16384 留余量），超限自动封顶该页缩放；
+ * - 双缓冲上屏（M2 闪屏修复）：渲染先落队列私有的离屏画布，成功且仍是该画布
+ *   最新代之后，才在同一个同步块里对可见画布「赋尺寸 + 拷贝位图 + 写 CSS 尺寸」。
+ *   对可见画布直接赋 width/height 会同步清空位图，而 pdf.js 绘制是异步的——
+ *   中间窗口画布全透明、露出页项白底，即缩放闪屏的根源；被取代的任务从头到尾
+ *   不碰可见画布（防竞态语义比逐格清屏重绘更严）。
  */
 
 /** 单边光栅上限（px）。 */
@@ -101,11 +106,15 @@ export class RenderQueue {
   private readonly slots = new WeakMap<HTMLCanvasElement, CanvasSlot>();
   private readonly jobs: QueueJob[] = [];
   private running: QueueJob | null = null;
+  /** 离屏中转画布（双缓冲）：串行执行期间同一时刻只有一个任务在跑，独占复用
+   *  一块即可，避免每次渲染分配大位图；clear() 时缩为 0×0 释放位图不跨文档滞留。 */
+  private scratch: HTMLCanvasElement | null = null;
 
   /**
    * 低阶入口（占位契约延续）：调用方已持有 PDFPageProxy 时直接排队渲染。
    * @param request.generation 代际令牌：同画布 newer generation 取代 older；
-   *   传入小于 store 当前 loadGeneration 的任务会被直接丢弃（文档已切换）。
+   *   缺省取激活标签的 loadGeneration（标签切换或重开后过期）。外部令牌
+   *   只与本画布 ticket 比较，不与 store 比对。
    */
   enqueue(request: {
     page: PDFPageProxy;
@@ -124,8 +133,9 @@ export class RenderQueue {
   }
 
   /**
-   * 高阶入口：按页号渲染当前会话文档的一页（页对象在出队时向 store 里的
-   * 文档取）。generation 缺省取 store 当前 loadGeneration，文档切换后自动过期。
+   * 高阶入口：按页号渲染当前激活标签文档的一页（页对象在出队时向激活标签的
+   * 文档取）。generation 缺省取**激活标签**的 loadGeneration，标签切换或该标签
+   * 重新装载后自动过期。
    */
   renderPage(request: {
     pageNumber: number;
@@ -178,6 +188,12 @@ export class RenderQueue {
       running.runningTask?.cancel();
       running.settle({ status: "cancelled" });
     }
+    // 离屏画布缩为 0×0 释放后备位图：上一份文档的最大页光栅不跨文档滞留
+    //（元素本身保留复用，下次渲染会重新赋到所需尺寸）。
+    if (this.scratch) {
+      this.scratch.width = 0;
+      this.scratch.height = 0;
+    }
   }
 
   // ---- 内部实现 -----------------------------------------------------------
@@ -190,7 +206,9 @@ export class RenderQueue {
     resolveScale: (page: PDFPageProxy) => number;
   }): RenderHandle {
     const storeGeneration = input.generation === undefined;
-    const generation = input.generation ?? useDocumentStore.getState().loadGeneration;
+    // 默认代际令牌来自激活标签（多标签下各标签代际互不单调，故用全等比对：
+    // 换激活标签或本标签重开都会让旧令牌过期，杜绝跨标签旧结果落笔）。
+    const generation = input.generation ?? activeTabOf(useDocumentStore.getState()).loadGeneration;
     const slot = this.slots.get(input.canvas) ?? { ticket: 0 };
     slot.ticket += 1;
     this.slots.set(input.canvas, slot);
@@ -257,9 +275,12 @@ export class RenderQueue {
 
   private isCurrentOnCanvas(job: QueueJob): boolean {
     if (job.cancelRequested) return false;
-    // 仅当 generation 是队列从 store 注入的默认值时才与 store 比对（文档切换过期）；
-    // 调用方自带的外部令牌（如侧栏本地代际）只与本画布 ticket 比较，语义互不串扰。
-    if (job.storeGeneration && job.generation < useDocumentStore.getState().loadGeneration) return false;
+    // 仅当 generation 是队列从 store 注入的默认值时才与「激活标签」的代际比对
+    // （换标签/本标签重开都过期）；调用方自带的外部令牌（如侧栏本地代际）
+    // 只与本画布 ticket 比较，语义互不串扰。
+    if (job.storeGeneration && job.generation !== activeTabOf(useDocumentStore.getState()).loadGeneration) {
+      return false;
+    }
     const slot = this.slots.get(job.canvas);
     return slot !== undefined && slot.ticket === job.ticket;
   }
@@ -297,24 +318,36 @@ export class RenderQueue {
     const viewport = page.getViewport({ scale: geometry.cssScale });
     const dpr = window.devicePixelRatio || 1;
     const { canvas } = job;
-    canvas.width = geometry.rasterWidth;
-    canvas.height = geometry.rasterHeight;
-    canvas.style.width = `${geometry.cssWidth}px`;
-    canvas.style.height = `${geometry.cssHeight}px`;
+    // 双缓冲：先画到队列私有的离屏画布。若在这里就对可见画布赋 width/height，
+    // 位图会被同步清空为透明，而新画面要等异步 render 完成才存在——中间窗口
+    // 露出页项白底，正是缩放闪屏的根源。离屏画布每次赋到精确尺寸再渲染，
+    // 保证 drawImage 上屏时是 1:1 拷贝（不留上一代的残影区域）。
+    const scratch = (this.scratch ??= document.createElement("canvas"));
+    scratch.width = geometry.rasterWidth;
+    scratch.height = geometry.rasterHeight;
 
     try {
       const task = page.render({
-        canvas,
+        canvas: scratch,
         viewport,
         transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined,
       });
       job.runningTask = task;
       await task.promise;
       if (!this.isCurrentOnCanvas(job)) {
-        // 渲染完成后已被取代：不清空画布（新任务即将覆盖），仅结算取消。
+        // 渲染完成后已被取代：丢弃离屏结果即可——可见画布从头到尾未被触碰
+        // （旧位图仍铺满占位框），新任务落地前不出现空白窗口，仅结算取消。
         job.settle({ status: "cancelled" });
         return;
       }
+      // 上屏：位图清空（赋 width/height）与拷贝绘制、CSS 尺寸写在同一个同步块，
+      // 合成器没有机会在「清空 → 新位图」之间插入空白帧。
+      canvas.width = geometry.rasterWidth;
+      canvas.height = geometry.rasterHeight;
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.drawImage(scratch, 0, 0);
+      canvas.style.width = `${geometry.cssWidth}px`;
+      canvas.style.height = `${geometry.cssHeight}px`;
       job.settle({ status: "painted", geometry });
     } catch (error) {
       if (job.cancelRequested || error instanceof pdfjsLib.RenderingCancelledException) {
@@ -328,9 +361,9 @@ export class RenderQueue {
   }
 }
 
-/** 取当前会话文档的指定页（1 起）；无文档会话时抛错。 */
+/** 取激活标签文档的指定页（1 起）；无标签会话时抛错。 */
 function getPageOrThrow(pageNumber: number): Promise<PDFPageProxy> {
-  const { document } = useDocumentStore.getState();
+  const { document } = activeTabOf(useDocumentStore.getState());
   if (!document) {
     return Promise.reject(new Error("尚未打开文档，无法渲染页面"));
   }

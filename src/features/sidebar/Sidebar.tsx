@@ -3,7 +3,7 @@ import { Bookmark, LayoutGrid, PanelLeftClose, PanelLeftOpen } from "lucide-reac
 import clsx from "clsx";
 import { IconButton } from "../../components/IconButton";
 import { useUiStore, type SidebarTab } from "../../shell/uiStore";
-import { useDocumentStore } from "../../core/document/store";
+import { useDocumentStore, activeTabOf } from "../../core/document/store";
 import { ThumbnailsPanel } from "./ThumbnailsPanel";
 import { BookmarksPanel } from "./BookmarksPanel";
 import "./sidebar.css";
@@ -24,8 +24,11 @@ export function Sidebar() {
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
 
-  const status = useDocumentStore((s) => s.status);
-  const outline = useDocumentStore((s) => s.outline);
+  // 侧栏只看激活标签的会话字段（多标签 store，M2-计划 D1）。
+  const tab = useDocumentStore(activeTabOf);
+  const status = tab.status;
+  const outline = tab.outline;
+  const activeTabId = useDocumentStore((s) => s.activeTabId);
   const bookmarksUnavailable = status === "ready" && outline.length === 0;
 
   // 书签页签不可用（当前文档无书签）时自动切回缩略图。
@@ -69,7 +72,14 @@ export function Sidebar() {
         <IconButton icon={PanelLeftClose} label="折叠侧栏" onClick={toggleSidebar} />
       </div>
       <div className="sidebar-content">
-        {sidebarTab === "thumbnails" ? <ThumbnailsPanel /> : <BookmarksPanel />}
+        {/* key 绑定标签 id：换标签时面板整体重挂载——缩略图的绘制状态/画布位图、
+            书签的展开态都是「单标签私有」的局部状态，重挂载即干净归零，
+            不会把旧标签的画面带给新标签（两标签代际数值可能相等，不能只靠代际判别）。 */}
+        {sidebarTab === "thumbnails" ? (
+          <ThumbnailsPanel key={activeTabId ?? "none"} />
+        ) : (
+          <BookmarksPanel key={activeTabId ?? "none"} />
+        )}
       </div>
     </nav>
   );

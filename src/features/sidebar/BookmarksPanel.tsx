@@ -2,11 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
-import { useDocumentStore, type OutlineNode } from "../../core/document/store";
+import { useDocumentStore, activeTabOf, type OutlineNode } from "../../core/document/store";
 
 /**
  * 书签页签（技术方案模块 4 / 里程碑 M1-8）。
- * 数据来自 store.outline（core 装载时已把 pdf.js 目标解析为页码，本模块免接触 pdfjs 类型）：
+ * 数据来自激活标签的 outline（core 装载时已把 pdf.js 目标解析为页码，本模块免接触 pdfjs 类型）：
  * - 多级树可折叠展开（顶层默认展开，更深层默认折叠）；
  * - 点击节点按 pageNumber 定位跳页（写 store.currentPage，由查看器订阅滚动）；
  * - 外链型节点（有 url、无可解析页码）带外链图标，点击经 opener 插件交给系统
@@ -33,8 +33,10 @@ function defaultExpanded(nodes: readonly OutlineNode[]): ReadonlySet<string> {
 }
 
 export function BookmarksPanel() {
-  const status = useDocumentStore((s) => s.status);
-  const outline = useDocumentStore((s) => s.outline);
+  // 书签只看激活标签（多标签 store；换标签由 Sidebar 以 key 重挂载本面板）。
+  const tab = useDocumentStore(activeTabOf);
+  const status = tab.status;
+  const outline = tab.outline;
   const setCurrentPage = useDocumentStore((s) => s.setCurrentPage);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => defaultExpanded(outline));
 

@@ -12,11 +12,17 @@ interface PersistedPrefs {
   sidebarTab: SidebarTab;
   themePreference: ThemePreference;
   rightPanelVisible: boolean;
+  /** 画布反色是长期阅读偏好（M2 D8 设置项），跨会话保留，故入持久化。 */
+  canvasInvert: boolean;
 }
 
 interface UiState extends PersistedPrefs {
   /** 解析后的实际主题（system 偏好随系统变化刷新）。 */
   resolvedTheme: ResolvedTheme;
+  /** 沉浸模式（M2 T7 消费）：会话级瞬态，不入持久化——重开应用应回到常规布局，避免用户困惑。 */
+  immersive: boolean;
+  /** 搜索面板开合（M2 T4 消费）：会话级瞬态，不入持久化——面板跟随当次搜索会话，冷启动不应弹出空面板。 */
+  searchPanelOpen: boolean;
   toggleSidebar: () => void;
   setSidebarTab: (tab: SidebarTab) => void;
   setThemePreference: (preference: ThemePreference) => void;
@@ -24,6 +30,15 @@ interface UiState extends PersistedPrefs {
   cycleThemePreference: () => void;
   toggleRightPanel: () => void;
   setRightPanelVisible: (visible: boolean) => void;
+  /** 进入/退出沉浸模式（隐藏侧栏与工具栏）。 */
+  setImmersive: (immersive: boolean) => void;
+  toggleImmersive: () => void;
+  /** 展开/收起查看器搜索面板。 */
+  setSearchPanelOpen: (open: boolean) => void;
+  toggleSearchPanel: () => void;
+  /** 设置画布反色（默认关，性能取舍见 theme.css 的 .canvas-invert 注释）。 */
+  setCanvasInvert: (invert: boolean) => void;
+  toggleCanvasInvert: () => void;
 }
 
 const SIDEBAR_TABS: readonly SidebarTab[] = ["thumbnails", "bookmarks"];
@@ -48,6 +63,7 @@ function loadPrefs(): Partial<PersistedPrefs> {
     }
     if (isThemePreference(saved.themePreference)) prefs.themePreference = saved.themePreference;
     if (typeof saved.rightPanelVisible === "boolean") prefs.rightPanelVisible = saved.rightPanelVisible;
+    if (typeof saved.canvasInvert === "boolean") prefs.canvasInvert = saved.canvasInvert;
     return prefs;
   } catch {
     return {}; // 损坏的持久化数据直接忽略，回落默认值
@@ -69,6 +85,7 @@ const initialPrefs: PersistedPrefs = {
   sidebarTab: "thumbnails",
   themePreference: "system",
   rightPanelVisible: true,
+  canvasInvert: false,
   ...loadPrefs(),
 };
 const initialResolved = resolveTheme(initialPrefs.themePreference);
@@ -80,6 +97,8 @@ const initialResolved = resolveTheme(initialPrefs.themePreference);
 export const useUiStore = create<UiState>((set, get) => ({
   ...initialPrefs,
   resolvedTheme: initialResolved,
+  immersive: false,
+  searchPanelOpen: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setSidebarTab: (tab) => set({ sidebarTab: tab }),
   setThemePreference: (preference) =>
@@ -90,6 +109,12 @@ export const useUiStore = create<UiState>((set, get) => ({
   },
   toggleRightPanel: () => set((s) => ({ rightPanelVisible: !s.rightPanelVisible })),
   setRightPanelVisible: (visible) => set({ rightPanelVisible: visible }),
+  setImmersive: (immersive) => set({ immersive }),
+  toggleImmersive: () => set((s) => ({ immersive: !s.immersive })),
+  setSearchPanelOpen: (open) => set({ searchPanelOpen: open }),
+  toggleSearchPanel: () => set((s) => ({ searchPanelOpen: !s.searchPanelOpen })),
+  setCanvasInvert: (invert) => set({ canvasInvert: invert }),
+  toggleCanvasInvert: () => set((s) => ({ canvasInvert: !s.canvasInvert })),
 }));
 
 // ===== 模块加载即启动的副作用（先于首帧渲染，避免主题闪变） =====
@@ -109,6 +134,7 @@ useUiStore.subscribe((s) => {
     sidebarTab: s.sidebarTab,
     themePreference: s.themePreference,
     rightPanelVisible: s.rightPanelVisible,
+    canvasInvert: s.canvasInvert,
   });
 });
 

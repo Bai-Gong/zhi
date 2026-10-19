@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import clsx from "clsx";
-import { useDocumentStore } from "../../core/document/store";
+import { useDocumentStore, activeTabOf } from "../../core/document/store";
 import { renderQueue, type RenderHandle } from "../../core/document/renderQueue";
 
 /**
@@ -27,12 +27,14 @@ const DEFAULT_ASPECT = Math.SQRT2;
 type ThumbPhase = "rendered" | "failed";
 
 export function ThumbnailsPanel() {
-  const status = useDocumentStore((s) => s.status);
-  const numPages = useDocumentStore((s) => s.numPages);
-  const pageSizes = useDocumentStore((s) => s.pageSizes);
-  const currentPage = useDocumentStore((s) => s.currentPage);
+  // 缩略图只跟随激活标签（多标签 store；换标签由 Sidebar 以 key 重挂载本面板）。
+  const tab = useDocumentStore(activeTabOf);
+  const status = tab.status;
+  const numPages = tab.numPages;
+  const pageSizes = tab.pageSizes;
+  const currentPage = tab.currentPage;
+  const loadGeneration = tab.loadGeneration;
   const setCurrentPage = useDocumentStore((s) => s.setCurrentPage);
-  const loadGeneration = useDocumentStore((s) => s.loadGeneration);
 
   /** page → 绘制结果（undefined = 尚未绘制/已被回收）。 */
   const [phases, setPhases] = useState<Readonly<Record<number, ThumbPhase>>>({});
@@ -71,7 +73,7 @@ export function ThumbnailsPanel() {
     const canvas = canvasRefs.current.get(page);
     if (!canvas || startedRef.current.has(page)) return;
     startedRef.current.add(page);
-    const sizes = useDocumentStore.getState().pageSizes;
+    const sizes = activeTabOf(useDocumentStore.getState()).pageSizes;
     const size = sizes[page - 1];
     const aspect = size && size.width > 0 ? size.height / size.width : DEFAULT_ASPECT;
     // renderThumbnail 按最长边适配：Portrait 时最长边是高，放大 maxEdge 使宽度落到 THUMB_WIDTH。
@@ -135,8 +137,9 @@ export function ThumbnailsPanel() {
     [startRender, recycle],
   );
 
-  // 文档切换（loadGeneration 递增）：复位绘制状态，取消在途任务并释放全部位图，
-  // 再对已登记元素重开一轮可见性观察（observe 会补发一次当前状态回调）。
+  // 激活标签重新装载（loadGeneration 递增）：复位绘制状态，取消在途任务并释放
+  // 全部位图，再对已登记元素重开一轮可见性观察（observe 会补发一次当前状态回调）。
+  // 换标签则由 Sidebar 以 key 重挂载本面板，不走这里。
   useEffect(() => {
     startedRef.current.clear();
     for (const handle of inFlightRef.current.values()) handle.cancel();

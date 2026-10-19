@@ -1,0 +1,148 @@
+/* 高亮线局部样式（viewer 模块）：覆盖层、选区浮动操作条、「另存副本」浮动条。
+   骨架类在 src/styles/global.css（shell 维护），此处只补高亮线自有类；
+   UI 色全部走 theme CSS 变量，高亮内容色除外（常量落码，见 highlightLayer.tsx）。 */
+
+/* ===== 覆盖层：铺满页项，与画布同 viewport 对齐（文本层 z=2，覆盖层压其上） ===== */
+.highlight-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none; /* 空白处不拦文本选区；只有矩形本身可点 */
+}
+
+.highlight-rect {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 1px;
+}
+
+.highlight-rect.selected {
+  outline: 1.5px solid var(--accent);
+}
+
+/* ===== 选区/选中高亮的浮动操作条 ===== */
+.hl-selection-bar {
+  position: absolute; /* 锚在页项内，随页滚动不走位 */
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.16);
+  transform: translate(-50%, -100%); /* 默认悬在锚定矩形上方 */
+}
+
+.hl-selection-bar.below {
+  transform: translate(-50%, 0); /* 贴页顶时翻到下方 */
+}
+
+.hl-bar-tag {
+  padding: 0 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.hl-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 0.18);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.hl-swatch:hover {
+  filter: brightness(1.08);
+}
+
+.hl-swatch.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.hl-bar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.hl-bar-button:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+/* ===== 「另存副本」浮动条（窗口右下角，固定定位，全局仅一份） ===== */
+.hl-save-pill {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, 60vw);
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.18);
+  font-size: 13px;
+}
+
+.hl-save-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  cursor: pointer;
+}
+
+.hl-save-trigger:hover {
+  filter: brightness(1.05);
+}
+
+.hl-save-msg {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.hl-save-msg.err {
+  color: var(--danger);
+}
+
+.hl-save-secondary {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.hl-save-secondary:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
