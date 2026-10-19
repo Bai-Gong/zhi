@@ -62,8 +62,9 @@ jobs:
           workspaces: src-tauri
       - name: 安装依赖
         run: npm ci
+      # 只产 NSIS 安装包：WiX(MSI) 的 codepage 1252 无法编码中文产品名"百工纸"（LGHT0311）
       - name: 构建 Tauri 安装包
-        run: npm run tauri build
+        run: npm run tauri build -- --bundles nsis
       - name: 读取版本号
         id: ver
         shell: bash
@@ -78,6 +79,4 @@ jobs:
           body: |
             正式发布（由 main 分支流水线自动生成）。
             发布前请确认已在 main 上提升 tauri.conf.json 版本号。
-          files: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/msi/*.msi
+          files: src-tauri/target/release/bundle/nsis/*.exe
