@@ -1,0 +1,166 @@
+/* 侧栏模块私有样式（模块 4）。
+   骨架类（.sidebar / .sidebar-header / .sidebar-tab / .sidebar-content /
+   .sidebar-empty / .sidebar-hint）定义在 src/styles/global.css（shell 模块），
+   此处只补缩略图与书签树的模块内样式。 */
+
+/* ===== 缩略图 ===== */
+.thumbnails-panel .sidebar-hint {
+  text-align: center;
+}
+
+.thumbnail-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.thumbnail-item {
+  display: flex;
+  justify-content: center;
+}
+
+.thumbnail-jump {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.thumbnail-jump:hover {
+  background: var(--bg-subtle);
+}
+
+.thumbnail-item.active .thumbnail-jump {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.thumbnail-canvas-wrap {
+  position: relative;
+  width: 176px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.thumbnail-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.thumbnail-canvas.hidden {
+  display: none;
+}
+
+.thumbnail-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+.thumbnail-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.thumbnail-item.active .thumbnail-label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ===== 书签树 ===== */
+.bookmarks-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.bookmark-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.bookmark-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.bookmark-chevron:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+/* 无子节点的缩进占位（与展开箭头同宽）。 */
+.bookmark-dot {
+  width: 18px;
+  flex: none;
+}
+
+.bookmark-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bookmark-title:hover {
+  background: var(--bg-subtle);
+}
+
+.bookmark-title.is-muted {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.bookmark-title.is-muted:hover {
+  background: transparent;
+}
+
+.bookmark-title.is-link {
+  color: var(--text-secondary);
+}
+
+.bookmark-title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-link-icon {
+  flex: none;
+  color: var(--text-muted);
+}
