@@ -1,0 +1,128 @@
+/* 查看器局部样式（模块 3）。骨架类（.viewer-page/.viewer-toolbar/.viewer-empty 等）
+   在 src/styles/global.css（shell 模块维护），此处只补查看器自有类。 */
+
+/* ===== 滚动容器（连续滚动主舞台） ===== */
+.viewer-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-subtle, #efefed);
+}
+
+/* 键盘翻页聚焦指示（仅键盘导航时显示） */
+.viewer-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.viewer-state {
+  padding: 24px;
+}
+
+/* ===== 页栈：页项纵向堆叠并水平居中（宽于视口时可横向滚动） ===== */
+.viewer-pages {
+  position: relative; /* 页项 offsetTop 的定位基准 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: max-content;
+  min-width: 100%;
+  margin: 0 auto;
+}
+
+/* 页项：占位尺寸由内联样式按「基准页尺寸 × 缩放」给定，离屏页卸载画布后布局仍稳定。
+   以下 CSS 变量是 pdf.js v6 的文本层/尺寸契约（官方 pdf_viewer.css 中
+   .pdfViewer .page 一节的必要子集）；--scale-factor 由 JS 开在 .viewer-pages 上。 */
+.viewer-page-item {
+  position: relative;
+  flex: none;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+
+  --user-unit: 1;
+  --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+}
+
+.viewer-page-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ===== 文本层（pdf.js v6 契约，官方 pdf_viewer.css 的 .textLayer 必要子集） =====
+   span 透明、绝对定位（百分比），字体尺寸经 --total-scale-factor 缩放；
+   选中态为半透明蓝。仅承载选择/命中，不参与视觉。 */
+.viewer-text-layer {
+  color-scheme: only light;
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 2;
+
+  --min-font-size: 1; /* TextLayer 构造时会以内联样式覆盖 */
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.viewer-text-layer span,
+.viewer-text-layer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+
+.viewer-text-layer > :not(.markedContent),
+.viewer-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.viewer-text-layer .markedContent {
+  display: contents;
+}
+
+.viewer-text-layer span[role="img"] {
+  user-select: none;
+  cursor: default;
+}
+
+.viewer-text-layer ::selection {
+  background: rgb(0 0 255 / 0.25);
+  color: transparent;
+}
+
+.viewer-text-layer br::selection {
+  background: transparent;
+}
+
+/* ===== 工具栏补充 ===== */
+.viewer-toolbar-file {
+  margin-left: 8px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
