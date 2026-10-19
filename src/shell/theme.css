@@ -1,0 +1,120 @@
+/* 主题骨架与外壳增量样式（shell 模块维护）。
+   浅色基线变量在 src/styles/global.css；此处补深色覆盖、color-scheme 与外壳新增区域样式。
+   深色覆盖用 :root[data-theme="dark"] 提高特异性，保证与加载顺序无关地压过浅色基线。 */
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-app: #1c1917;
+  --bg-panel: #292524;
+  --bg-subtle: #33302e;
+  --text-primary: #f5f5f4;
+  --text-secondary: #d6d3d1;
+  --text-muted: #a8a29e;
+  --border: #44403c;
+  --accent: #f59e0b;
+  --accent-soft: #3b2c10;
+  --danger: #f87171;
+}
+
+/* 键盘可达性：焦点环（主题骨架一部分） */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ===== 顶栏右侧动作区 ===== */
+.top-bar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.top-bar-theme-text {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ===== 右侧面板（占位）：展开态标题行 ===== */
+.shell-aside {
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-aside-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.shell-aside-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 收起态：窄轨，仅保留展开按钮 */
+.shell-aside.collapsed {
+  width: var(--sidebar-rail-width);
+  align-items: center;
+  padding: 8px 0;
+}
+
+/* ===== 页面级错误兜底 ===== */
+.shell-error {
+  max-width: 480px;
+  margin: 10% auto 0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+}
+
+.shell-error-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.shell-error-message {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.shell-error-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.shell-error-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.shell-error-button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
