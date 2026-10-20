@@ -5,7 +5,17 @@
  * 因此本出口不含任何 pdfjs 符号——渲染一律经 renderQueue / renderTextLayer。
  */
 export { useDocumentStore } from "./store";
-export type { DocumentStatus, DocumentSessionState, DocumentMeta, PageSize, OutlineNode } from "./store";
+export type {
+  DocumentStatus,
+  DocumentSessionState,
+  DocumentMeta,
+  PageSize,
+  OutlineNode,
+  SearchScope,
+  SearchStatus,
+  SearchResult,
+  SearchReveal,
+} from "./store";
 
 export { openDocument, closeDocument, pickPdfFile, getPage } from "./openDocument";
 
@@ -17,3 +27,7 @@ export type { RenderHandle, RenderOutcome, RenderGeometry } from "./renderQueue"
 
 export { renderTextLayer } from "./textLayer";
 export type { TextLayerHandle } from "./textLayer";
+
+export { runSearch, revealSearchResult, revealRelativeSearchResult } from "./search";
+export { getHitRects } from "./textIndex";
+export type { HitRect } from "./textIndex";

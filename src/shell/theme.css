@@ -17,6 +17,8 @@
   --border: #44403c;
   --accent: #f59e0b;
   --accent-soft: #3b2c10;
+  /* 强调色上的前景字：深色主题 accent 变亮（#f59e0b），白字对比约 2.2:1 不过 AA，改深字约 7.9:1。 */
+  --accent-contrast: #1c1917;
   --danger: #f87171;
 }
 
@@ -116,5 +118,58 @@
 .shell-error-button.primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast);
+}
+
+/* ===== 沉浸模式（M2 阅读模式）：chrome 转覆盖层，唤出/隐藏纯 transform =====
+   包含块：.app-shell 承顶栏、.shell-body 承侧栏；z 栈：顶栏 50 > 侧栏 40 >
+   查看器工具栏 30（viewer.css，同属根栈比较）。侧栏 inset 顶边
+   var(--top-bar-height)：顶栏显现时永不遮挡侧栏页签与折叠钮。
+   隐藏用 transform 平移 + visibility 延迟到过渡结束切换（焦点元素不提前移出
+   可聚焦树，配合 useImmersiveEdges 的 focus 钉住复检）。 */
+.app-shell.immersive {
+  position: relative;
+}
+
+.app-shell.immersive .shell-body {
+  position: relative;
+}
+
+.app-shell.immersive .top-bar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 50;
+  transform: translateY(-100%);
+  visibility: hidden;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0.2s;
+}
+
+.app-shell.immersive.revealed-top .top-bar {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.2s ease;
+}
+
+/* 侧栏按用户既有折叠/展开状态原样唤出（44px 轨或整栏），不强制展开。 */
+.app-shell.immersive .sidebar {
+  position: absolute;
+  top: var(--top-bar-height);
+  left: 0;
+  bottom: 0;
+  z-index: 40;
+  transform: translateX(-100%);
+  visibility: hidden;
+  box-shadow: 2px 0 8px rgb(0 0 0 / 0.25);
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0.2s;
+}
+
+.app-shell.immersive.revealed-left .sidebar {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.2s ease;
 }

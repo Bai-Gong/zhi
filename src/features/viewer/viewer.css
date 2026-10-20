@@ -1,6 +1,65 @@
 /* 查看器局部样式（模块 3）。骨架类（.viewer-page/.viewer-toolbar/.viewer-empty 等）
    在 src/styles/global.css（shell 模块维护），此处只补查看器自有类。 */
 
+/* ===== 阅读模式四态变量矩阵（M2）=====
+   两轴各自挂各自的选择器，笛卡尔组合即四态（浅/深 × 反色/不反色）：
+   - 纸色轴（挂 .canvas-inverted）：命中高亮与选区的可读性取决于纸色而非外壳主题；
+     不反色 = 现状值（白纸、半透明黄命中、蓝选区）；
+     反色 = 黑纸（#000000 恰为 invert(#ffffff)，占位与反色白纸像素一致）、
+       更高透明度的命中与更亮的选区（黑纸上可见）；
+   - 背景轴（挂 [data-theme="dark"]，.viewer-scroll 底色随之变暗）：
+     页影加深保持层次（浅色底上 0.2 黑影在暗底不可见）。 */
+.viewer-page {
+  position: relative; /* 沉浸下工具栏覆盖层的包含块 */
+  --paper-bg: #ffffff;
+  --hit-bg: rgb(255 213 79 / 0.35);
+  --hit-flash: rgb(255 152 0 / 0.7);
+  --page-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+}
+
+:root[data-theme="dark"] .viewer-page {
+  --page-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+}
+
+/* 深色阅读：只滤画布元素（命中层/文本层为兄弟节点不受滤，几何契约零影响；
+   滤镜类不外溢——侧栏缩略图与后续组织视图缩略图一律忠实原文观感）。
+   hue-rotate(180°) 补偿 invert 的色相翻转：白纸→黑纸、彩色图表色相基本保持。 */
+.viewer-page.canvas-inverted {
+  --paper-bg: #000000;
+  --hit-bg: rgb(255 213 79 / 0.5);
+  --hit-flash: rgb(255 152 0 / 0.9);
+}
+
+.viewer-page.canvas-inverted .viewer-page-canvas {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.viewer-page.canvas-inverted .viewer-text-layer ::selection {
+  background: rgb(96 165 250 / 0.45);
+}
+
+/* ===== 沉浸模式：工具栏转覆盖层（顶栏/侧栏覆盖层在 shell/theme.css）。
+   隐藏位移 = 自身高度 + 顶栏高度：与顶栏隐藏位叠放，两块同步滑入即正确堆叠。 ===== */
+.viewer-page.immersive .viewer-toolbar {
+  position: absolute;
+  top: var(--top-bar-height);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  transform: translateY(calc(-100% - var(--top-bar-height)));
+  visibility: hidden;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0.2s;
+}
+
+.viewer-page.immersive.revealed-top .viewer-toolbar {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.2s ease;
+}
+
 /* ===== 滚动容器（连续滚动主舞台） ===== */
 .viewer-scroll {
   flex: 1;
@@ -37,8 +96,8 @@
 .viewer-page-item {
   position: relative;
   flex: none;
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+  background: var(--paper-bg, #fff);
+  box-shadow: var(--page-shadow, 0 1px 3px rgb(0 0 0 / 0.2));
 
   --user-unit: 1;
   --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
@@ -114,6 +173,32 @@
 
 .viewer-text-layer br::selection {
   background: transparent;
+}
+
+/* ===== 全文搜索命中层（M2）：高于文本层（z-index 2），不拦截鼠标 ===== */
+.viewer-hit-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.search-hit {
+  position: absolute;
+  border-radius: 2px;
+  /* 半透明黄（值随纸色轴：白纸 0.35 / 反色黑纸 0.5，见文件头变量矩阵）。 */
+  background: var(--hit-bg, rgb(255 213 79 / 0.35));
+}
+
+.search-hit-flash {
+  background: var(--hit-bg, rgb(255 213 79 / 0.35));
+  animation: search-hit-flash 0.4s ease-in-out 3; /* 闪烁 3 次，共约 1.2 秒 */
+}
+
+@keyframes search-hit-flash {
+  50% {
+    background: var(--hit-flash, rgb(255 152 0 / 0.7));
+  }
 }
 
 /* ===== 工具栏补充 ===== */

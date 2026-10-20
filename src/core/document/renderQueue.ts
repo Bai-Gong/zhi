@@ -105,6 +105,31 @@ export class RenderQueue {
   private readonly slots = new WeakMap<HTMLCanvasElement, CanvasSlot>();
   private readonly jobs: QueueJob[] = [];
   private running: QueueJob | null = null;
+  /** 等待队列排空的回调（whenIdle 登记，drain 时一次性结算）。 */
+  private idleWaiters: Array<() => void> = [];
+
+  /** 是否有排队/运行中的任务（core 内部信号，供文本索引调度让位）。 */
+  get busy(): boolean {
+    return this.running !== null || this.jobs.length > 0;
+  }
+
+  /**
+   * 等待队列排空（drain）；当前已空闲则立即 resolve。core 内部供 M2 文本索引
+   * 调度让位：渲染绝对优先，索引在队列空闲的间隙分批推进（不改变对外渲染契约）。
+   */
+  whenIdle(): Promise<void> {
+    if (!this.busy) return Promise.resolve();
+    return new Promise((resolve) => {
+      this.idleWaiters.push(resolve);
+    });
+  }
+
+  /** 队列已排空：结算全部等待者（clear 后同样视为空闲）。 */
+  private notifyIdle(): void {
+    if (this.idleWaiters.length === 0) return;
+    const waiters = this.idleWaiters.splice(0, this.idleWaiters.length);
+    for (const resolve of waiters) resolve();
+  }
 
   /**
    * 低阶入口（占位契约延续）：调用方已持有 PDFPageProxy 时直接排队渲染。
@@ -182,6 +207,7 @@ export class RenderQueue {
       running.runningTask?.cancel();
       running.settle({ status: "cancelled" });
     }
+    this.notifyIdle();
   }
 
   // ---- 内部实现 -----------------------------------------------------------
@@ -271,7 +297,10 @@ export class RenderQueue {
   private pump(): void {
     if (this.running !== null) return;
     const job = this.jobs.shift();
-    if (!job) return;
+    if (!job) {
+      this.notifyIdle();
+      return;
+    }
     this.running = job;
     void this.execute(job).finally(() => {
       if (this.running === job) this.running = null;

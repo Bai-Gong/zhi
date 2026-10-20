@@ -32,6 +32,46 @@ export interface DocumentMeta {
   outline: OutlineNode[];
 }
 
+// ===== 全文搜索（M2）=====
+
+/** 搜索范围（里程碑 M2 验收 2：当前页/全文档开关）。 */
+export type SearchScope = "all" | "currentPage";
+
+/** 搜索会话状态机：indexing=等索引构建，searching=扫描中。 */
+export type SearchStatus = "idle" | "indexing" | "searching" | "done" | "error";
+
+/** 单条搜索命中（纯数据，供侧栏结果列表与查看器高亮层消费）。 */
+export interface SearchResult {
+  /** 稳定主键：`页码:页内偏移`。 */
+  id: string;
+  /** 1 起。 */
+  pageNumber: number;
+  /** 命中在页拼接文本中的 [start, end) 字符偏移（供 core 映射命中矩形）。 */
+  start: number;
+  end: number;
+  /** 上下文摘录（pre-split，UI 直接以 mark 渲染命中段）。 */
+  excerptBefore: string;
+  excerptMatch: string;
+  excerptAfter: string;
+}
+
+/**
+ * 命中揭示请求：core 的 revealSearchResult 写入，ViewerPage 订阅 seq 执行
+ * 「跳页 + 滚动到命中位置」。跨模块数据只经本 store 下发（技术方案 4.3 规则 2），
+ * 侧栏不接触查看器内部。矩形为当前缩放下的 CSS 像素（页左上原点，与文本层
+ * 同坐标系），由 core 计算保证与画布/文本层同 viewport 语义。
+ */
+export interface SearchReveal {
+  /** 单调递增序号：每次揭示递增，消费方据此触发（同值不重触发）。 */
+  seq: number;
+  /** 1 起。 */
+  page: number;
+  cssTop: number;
+  cssHeight: number;
+  cssLeft: number;
+  cssWidth: number;
+}
+
 /**
  * 文档会话 store（技术方案模块 5）：查看器与侧栏只消费此 store 与 core 接口。
  * `document` 仅供 core 内部流转；外部请经 core 暴露的 getPage/renderPage 等接口访问。
@@ -56,6 +96,23 @@ export interface DocumentSessionState {
    */
   loadGeneration: number;
 
+  // ===== 全文搜索（M2）：查询与选项以本 store 为唯一真源，
+  // 状态/结果/进度由 core 的 search 模块写入，UI 只读消费 =====
+  searchQuery: string;
+  searchCaseSensitive: boolean;
+  searchScope: SearchScope;
+  searchStatus: SearchStatus;
+  searchError: string | null;
+  searchResults: SearchResult[];
+  /** 完整命中总数（searchResults 受渲染上限截断时此值仍为全量）。 */
+  searchTotalHits: number;
+  /** 全文档零命中且所有页均无文本（扫描件）：面板据此给专门空态文案。 */
+  searchDocWithoutText: boolean;
+  /** 文本索引构建进度（构建中才有值）。 */
+  searchIndexProgress: { done: number; total: number } | null;
+  activeSearchResultId: string | null;
+  searchReveal: SearchReveal | null;
+
   beginLoad: (path: string, fileName: string) => void;
   ready: (meta: DocumentMeta) => void;
   fail: (message: string) => void;
@@ -63,6 +120,10 @@ export interface DocumentSessionState {
   close: () => void;
   setCurrentPage: (page: number) => void;
   setScale: (scale: number) => void;
+  /** 提交搜索查询（防抖后的输入；空串即清结果）。 */
+  setSearchQuery: (query: string) => void;
+  /** 变更搜索选项（大小写/范围）；调用方随即以 store 当前 query 重跑（验收 2）。 */
+  setSearchOptions: (options: { caseSensitive?: boolean; scope?: SearchScope }) => void;
   /** 仅供测试/复位使用。 */
   reset: () => void;
 }
@@ -79,6 +140,17 @@ const initial = {
   scale: 1,
   error: null,
   loadGeneration: 0,
+  searchQuery: "",
+  searchCaseSensitive: false,
+  searchScope: "all" as SearchScope,
+  searchStatus: "idle" as SearchStatus,
+  searchError: null,
+  searchResults: [] as SearchResult[],
+  searchTotalHits: 0,
+  searchDocWithoutText: false,
+  searchIndexProgress: null,
+  activeSearchResultId: null,
+  searchReveal: null,
 };
 
 export const useDocumentStore = create<DocumentSessionState>((set) => ({
@@ -112,5 +184,11 @@ export const useDocumentStore = create<DocumentSessionState>((set) => ({
       return { currentPage: Math.min(s.numPages, Math.max(1, Math.round(page))) };
     }),
   setScale: (scale) => set({ scale: Math.min(4, Math.max(0.25, scale)) }),
+  setSearchQuery: (query) => set({ searchQuery: query }),
+  setSearchOptions: (options) =>
+    set((s) => ({
+      searchCaseSensitive: options.caseSensitive ?? s.searchCaseSensitive,
+      searchScope: options.scope ?? s.searchScope,
+    })),
   reset: () => set(initial),
 }));

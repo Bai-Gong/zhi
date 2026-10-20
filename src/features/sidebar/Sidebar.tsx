@@ -1,20 +1,22 @@
 import { useEffect } from "react";
-import { Bookmark, LayoutGrid, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Bookmark, LayoutGrid, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import clsx from "clsx";
 import { IconButton } from "../../components/IconButton";
 import { useUiStore, type SidebarTab } from "../../shell/uiStore";
 import { useDocumentStore } from "../../core/document/store";
 import { ThumbnailsPanel } from "./ThumbnailsPanel";
 import { BookmarksPanel } from "./BookmarksPanel";
+import { SearchPanel } from "./SearchPanel";
 import "./sidebar.css";
 
 const TABS: Array<{ id: SidebarTab; label: string; icon: typeof LayoutGrid }> = [
   { id: "thumbnails", label: "缩略图", icon: LayoutGrid },
   { id: "bookmarks", label: "书签", icon: Bookmark },
+  { id: "search", label: "搜索", icon: Search },
 ];
 
 /**
- * 左侧导航侧栏（模块 4）：缩略图/书签两页签，可折叠。
+ * 左侧导航侧栏（模块 4）：缩略图/书签/搜索三页签，可折叠。
  * 与 viewer 互不依赖，只消费 core 的 store 与接口（技术方案 4.3 规则 2）。
  * 无书签的文档禁用书签页签（里程碑 M1-8）；书签失效时自动切回缩略图。
  */
@@ -69,7 +71,13 @@ export function Sidebar() {
         <IconButton icon={PanelLeftClose} label="折叠侧栏" onClick={toggleSidebar} />
       </div>
       <div className="sidebar-content">
-        {sidebarTab === "thumbnails" ? <ThumbnailsPanel /> : <BookmarksPanel />}
+        {sidebarTab === "thumbnails" ? (
+          <ThumbnailsPanel />
+        ) : sidebarTab === "bookmarks" ? (
+          <BookmarksPanel />
+        ) : (
+          <SearchPanel />
+        )}
       </div>
     </nav>
   );

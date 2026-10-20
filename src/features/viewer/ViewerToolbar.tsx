@@ -1,15 +1,20 @@
-// 查看器顶部上下文工具栏（模块 3）：打开文件、侧栏开关、文件名、翻页与页码跳转、缩放与适应宽度。
+// 查看器顶部上下文工具栏（模块 3）：打开文件、侧栏开关、文件名、翻页与页码跳转、缩放与适应宽度、
+// 阅读模式（沉浸）与深色阅读（反转画布底色）。
 // 页码变化统一走 store.currentPage，由 ViewerPage 的滚动联动消费（按钮/页码输入/侧栏同一通道）；
-// 「适应宽度」需要滚动容器与页面尺寸，真实计算经 scrollBridge 由 ViewerPage 注册执行。
+// 「适应宽度」需要滚动容器与页面尺寸，真实计算经 scrollBridge 由 ViewerPage 注册执行；
+// 快捷键（含 Ctrl+F 打开搜索）统一由 shortcuts.ts 的 window 分发器处理，工具栏只保留按钮入口。
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  BookOpen,
+  Contrast,
   ChevronDown,
   ChevronUp,
   FileX,
   FolderOpen,
   MoveHorizontal,
   PanelLeft,
+  Search,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -17,9 +22,10 @@ import { IconButton } from "../../components/IconButton";
 import { closeDocument, openDocument, pickPdfFile } from "../../core/document/openDocument";
 import { useDocumentStore } from "../../core/document/store";
 import { buildViewerUrl } from "../../shell/routes";
-import { useUiStore } from "../../shell/uiStore";
+import { escapeFromEditable, useUiStore } from "../../shell/uiStore";
 import { clampScale, ZOOM_STEP } from "./pageGeometry";
-import { requestFitWidth } from "./scrollBridge";
+import { openSearchPanel } from "./shortcuts";
+import { clearAutoFit, requestFitWidth } from "./scrollBridge";
 
 export function ViewerToolbar() {
   const navigate = useNavigate();
@@ -32,6 +38,10 @@ export function ViewerToolbar() {
   const setScale = useDocumentStore((s) => s.setScale);
 
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  const immersiveMode = useUiStore((s) => s.immersiveMode);
+  const toggleImmersive = useUiStore((s) => s.toggleImmersive);
+  const invertCanvas = useUiStore((s) => s.invertCanvas);
+  const toggleInvertCanvas = useUiStore((s) => s.toggleInvertCanvas);
 
   const hasDocument = numPages > 0;
 
@@ -75,14 +85,33 @@ export function ViewerToolbar() {
     }
   };
 
-  const zoomBy = (factor: number) => setScale(clampScale(scale * factor));
+  /** 手动缩放：先退出「适应宽度」自动重适配（scrollBridge 的 autoFit 来源标志）。 */
+  const zoomBy = (factor: number) => {
+    clearAutoFit();
+    setScale(clampScale(scale * factor));
+  };
 
   return (
     <div className="viewer-toolbar" role="toolbar" aria-label="查看器工具栏">
       <div className="toolbar-group">
-        <IconButton icon={FolderOpen} label="打开 PDF 文件" onClick={() => void handleOpen()} />
-        <IconButton icon={FileX} label="关闭文档" disabled={!hasDocument} onClick={handleClose} />
+        <IconButton icon={FolderOpen} label="打开 PDF 文件（Ctrl+O）" onClick={() => void handleOpen()} />
+        <IconButton icon={FileX} label="关闭文档（Ctrl+W）" disabled={!hasDocument} onClick={handleClose} />
         <IconButton icon={PanelLeft} label="折叠/展开侧栏" onClick={toggleSidebar} />
+        <IconButton icon={Search} label="搜索全文（Ctrl+F）" disabled={!hasDocument} onClick={openSearchPanel} />
+        <IconButton
+          icon={BookOpen}
+          label={immersiveMode ? "退出阅读模式（F11）" : "进入阅读模式（F11）"}
+          aria-pressed={immersiveMode}
+          onClick={toggleImmersive}
+        />
+        <IconButton
+          icon={Contrast}
+          label={
+            invertCanvas ? "深色阅读：恢复文档底色（Ctrl+Alt+I）" : "深色阅读：反转文档底色（Ctrl+Alt+I）"
+          }
+          aria-pressed={invertCanvas}
+          onClick={toggleInvertCanvas}
+        />
         {fileName && (
           <span className="viewer-toolbar-file" title={fileName}>
             {fileName}
@@ -109,6 +138,8 @@ export function ViewerToolbar() {
             onBlur={() => goToPage(pageInput)}
             onKeyDown={(e) => {
               if (e.key === "Enter") goToPage(pageInput);
+              // 无可清内容时的 Escape 兜底：交还焦点；沉浸下退出沉浸（逃生通道）。
+              if (e.key === "Escape") escapeFromEditable(e.currentTarget);
             }}
           />{" "}
           / {Math.max(1, numPages)} 页
@@ -121,11 +152,11 @@ export function ViewerToolbar() {
         />
       </div>
       <div className="toolbar-group">
-        <IconButton icon={ZoomOut} label="缩小" disabled={!hasDocument} onClick={() => zoomBy(1 / ZOOM_STEP)} />
+        <IconButton icon={ZoomOut} label="缩小（Ctrl+-）" disabled={!hasDocument} onClick={() => zoomBy(1 / ZOOM_STEP)} />
         <span className="zoom-value" aria-label="缩放比例">
           {Math.round(scale * 100)}%
         </span>
-        <IconButton icon={ZoomIn} label="放大" disabled={!hasDocument} onClick={() => zoomBy(ZOOM_STEP)} />
+        <IconButton icon={ZoomIn} label="放大（Ctrl+=）" disabled={!hasDocument} onClick={() => zoomBy(ZOOM_STEP)} />
         <IconButton icon={MoveHorizontal} label="适应宽度" disabled={!hasDocument} onClick={() => requestFitWidth()} />
       </div>
     </div>

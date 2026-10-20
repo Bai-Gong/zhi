@@ -14,12 +14,16 @@
 //   「当前页 + 页内相对位置」锚点补偿滚动（5.3 第 10 条），避免视口跳飞。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams } from "react-router-dom";
+import clsx from "clsx";
 import { openDocument } from "../../core/document/openDocument";
 import { capScaleForRaster } from "../../core/document/renderQueue";
-import { useDocumentStore, type PageSize } from "../../core/document/store";
+import { useDocumentStore, type PageSize, type SearchReveal } from "../../core/document/store";
+import { useUiStore } from "../../shell/uiStore";
 import { clampScale, ZOOM_STEP } from "./pageGeometry";
 import { PageCanvas } from "./PageCanvas";
-import { registerFitWidthHandler } from "./scrollBridge";
+import { SearchHitLayer } from "./SearchHitLayer";
+import { isEditableTarget, useViewerShortcuts } from "./shortcuts";
+import { clearAutoFit, isAutoFit, registerFitWidthHandler, requestFitWidth } from "./scrollBridge";
 import { ViewerToolbar } from "./ViewerToolbar";
 import "./viewer.css";
 
@@ -39,10 +43,24 @@ export function ViewerPage() {
   const scale = useDocumentStore((s) => s.scale);
   const pdfDocument = useDocumentStore((s) => s.document);
   const storePageSizes = useDocumentStore((s) => s.pageSizes);
+  const loadGeneration = useDocumentStore((s) => s.loadGeneration);
+
+  // 阅读模式（M2）：沉浸覆盖层类名由 shell/uiStore 驱动；反色画布与 UI 主题正交。
+  const immersiveMode = useUiStore((s) => s.immersiveMode);
+  const immersiveReveal = useUiStore((s) => s.immersiveReveal);
+  const invertCanvas = useUiStore((s) => s.invertCanvas);
+
+  // 查看器快捷键（Ctrl+O/W/F、F3、缩放、F11、Ctrl+Alt+I、Esc）——window 级单一分发器。
+  useViewerShortcuts();
 
   useEffect(() => {
     if (path) void openDocument(path);
   }, [path]);
+
+  // 新文档会话：上一文档的「适应宽度」来源标志不作数。
+  useEffect(() => {
+    clearAutoFit();
+  }, [loadGeneration]);
 
   // ===== 页面基准尺寸（虚拟化占位与适应宽度计算的依据） =====
   // 由 core 的 openDocument 在 ready() 时随会话写入；无会话/装载中为空数组。
@@ -59,6 +77,8 @@ export function ViewerPage() {
   /** 缩放锚点：{ 页号, 页内相对位置 }，滚动时持续刷新。 */
   const anchorRef = useRef<{ page: number; ratio: number } | null>(null);
   const rafRef = useRef(0);
+  /** 布局未就绪时挂起的搜索揭示（布局就绪后补偿执行，不静默丢弃）。 */
+  const pendingRevealRef = useRef<SearchReveal | null>(null);
   /** 虚拟化：允许挂载 PageCanvas 的页索引集合（可视 ±1 视口）。 */
   const [visibleSet, setVisibleSet] = useState<ReadonlySet<number>>(() => new Set());
 
@@ -112,6 +132,24 @@ export function ViewerPage() {
     el.scrollTop = top;
   }, []);
 
+  /** 应用一次搜索命中揭示（跳页 + 命中滚入视口）；布局未就绪返回 false。 */
+  const applySearchReveal = useCallback((reveal: SearchReveal) => {
+    const el = scrollRef.current;
+    const tops = offsetsRef.current;
+    if (!el || !tops || tops.length === 0) return false;
+    const index = Math.min(Math.max(1, reveal.page), tops.length) - 1;
+    const pageTop = tops[index] ?? 0;
+    // 先消费页号再写滚动：阻断「外部页号 → scrollToPage(页顶)」效应覆盖命中
+    // 居中定位（同布局恢复手法）；随后由实际滚动位置回填报告。
+    lastReportedRef.current = index + 1;
+    useDocumentStore.getState().setCurrentPage(index + 1);
+    el.scrollTop = Math.max(0, pageTop + reveal.cssTop + reveal.cssHeight / 2 - el.clientHeight * 0.4);
+    // 横向超宽页：命中相对 .viewer-pages 的左内边距定位，须计入 VIEWER_PADDING
+    // （纵向 offsetTop 已含 padding 不受影响）；无横向溢出时浏览器自行钳制。
+    el.scrollLeft = Math.max(0, VIEWER_PADDING + reveal.cssLeft + reveal.cssWidth / 2 - el.clientWidth / 2);
+    return true;
+  }, []);
+
   const handleScroll = () => {
     if (rafRef.current) return;
     rafRef.current = window.requestAnimationFrame(() => {
@@ -139,7 +177,13 @@ export function ViewerPage() {
     lastReportedRef.current = target;
     if (target > 1) scrollToPage(target);
     updateAnchor();
-  }, [pageSizes, recomputeOffsets, scrollToPage, updateAnchor]);
+    // 布局未就绪期间挂起的搜索揭示：补偿执行（仍是最新一代 seq 才生效）。
+    const pending = pendingRevealRef.current;
+    if (pending) {
+      pendingRevealRef.current = null;
+      if (useDocumentStore.getState().searchReveal?.seq === pending.seq) applySearchReveal(pending);
+    }
+  }, [pageSizes, recomputeOffsets, scrollToPage, updateAnchor, applySearchReveal]);
 
   // ===== 外部页号消费（工具栏/侧栏/键盘 → store.currentPage → 滚动定位） =====
   useEffect(() => {
@@ -148,6 +192,16 @@ export function ViewerPage() {
     lastReportedRef.current = currentPage;
     scrollToPage(currentPage);
   }, [currentPage, pageSizes, scrollToPage]);
+
+  // ===== 搜索命中揭示（M2）：core 写 searchReveal（seq 递增），此处滚动定位 =====
+  const searchRevealSeq = useDocumentStore((s) => s.searchReveal?.seq ?? 0);
+  useEffect(() => {
+    if (!searchRevealSeq) return;
+    const reveal = useDocumentStore.getState().searchReveal;
+    if (!reveal || reveal.seq !== searchRevealSeq) return;
+    // 布局未就绪：挂起待布局就绪后补偿，不静默丢弃（seq 已消费也不丢语义）。
+    if (!applySearchReveal(reveal)) pendingRevealRef.current = reveal;
+  }, [searchRevealSeq, applySearchReveal]);
 
   // ===== 虚拟化：只挂载可视区 ±1 视口内的页 =====
   useEffect(() => {
@@ -216,29 +270,36 @@ export function ViewerPage() {
             : 1;
       const steps = (-event.deltaY * unit) / 100;
       const store = useDocumentStore.getState();
+      clearAutoFit(); // 手动缩放：退出「适应宽度」自动重适配
       store.setScale(clampScale(store.scale * Math.pow(ZOOM_STEP, steps)));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [pageSizes]);
 
-  // ===== 键盘翻页（方向键/PageUp/PageDown/Home/End，技术方案 5.3 第 9 条） =====
+  // ===== 键盘翻页（←→↑↓/PageUp/PageDown/Home/End，技术方案 5.3 第 9 条） =====
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !pageSizes) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      // 修饰键组合不属翻页：Alt+←→ 是 WebView2 历史导航（HashRouter 有真实历史栈），
+      // Ctrl/⌘ 组合归快捷键分发器——均放行不拦截（A4）。
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.isComposing) return; // 中文 IME 组合期
       const target = event.target instanceof Element ? event.target : null;
-      if (target && target.closest("input, textarea, [contenteditable='true']")) return;
+      if (isEditableTarget(target)) return;
       const store = useDocumentStore.getState();
       const max = Math.max(1, store.numPages);
       let destination: number;
       switch (event.key) {
         case "ArrowDown":
         case "PageDown":
+        case "ArrowRight":
           destination = Math.min(max, store.currentPage + 1);
           break;
         case "ArrowUp":
         case "PageUp":
+        case "ArrowLeft":
           destination = Math.max(1, store.currentPage - 1);
           break;
         case "Home":
@@ -287,12 +348,35 @@ export function ViewerPage() {
     });
   }, [pageSizes]);
 
+  // ===== autoFit 重适配（B12）：曾执行「适应宽度」时，容器实际宽变（沉浸进入/退出、
+  // 侧栏折叠）后重算。观察 border-box（offsetWidth）：滚动条出现/消失不触发，
+  // 避免 fit↔滚动条来回震荡；RO 回调本在布局提交后，无须额外 rAF。 =====
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !pageSizes) return;
+    let lastWidth = el.offsetWidth;
+    const observer = new ResizeObserver(() => {
+      const width = el.offsetWidth;
+      if (width === lastWidth) return;
+      lastWidth = width;
+      if (isAutoFit()) requestFitWidth();
+    });
+    observer.observe(el, { box: "border-box" });
+    return () => observer.disconnect();
+  }, [pageSizes]);
+
   // pdf.js 文本层/尺寸契约：--scale-factor 开在页栈上作默认值，
   // 各页项再按封顶后缩放逐页覆盖（百分比定位随之生效）。
   const pagesStyle = { "--scale-factor": String(scale), padding: VIEWER_PADDING } as CSSProperties;
 
   return (
-    <div className="viewer-page">
+    <div
+      className={clsx("viewer-page", {
+        immersive: immersiveMode,
+        "revealed-top": immersiveMode && immersiveReveal.top,
+        "canvas-inverted": invertCanvas,
+      })}
+    >
       <ViewerToolbar />
       <div
         ref={scrollRef}
@@ -342,7 +426,10 @@ export function ViewerPage() {
                   }
                 >
                   {visibleSet.has(index) && pdfDocument ? (
-                    <PageCanvas pageNumber={index + 1} scale={scale} distance={Math.abs(index + 1 - currentPage)} />
+                    <>
+                      <PageCanvas pageNumber={index + 1} scale={scale} distance={Math.abs(index + 1 - currentPage)} />
+                      <SearchHitLayer pageNumber={index + 1} />
+                    </>
                   ) : null}
                 </div>
               );

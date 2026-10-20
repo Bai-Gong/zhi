@@ -6,6 +6,7 @@ import { initPdfjs, pdfjsLib, InvalidPDFException, PasswordException } from "./p
 import { useDocumentStore, type PageSize } from "./store";
 import { readOutline } from "./outline";
 import { renderQueue } from "./renderQueue";
+import { scheduleTextIndexBuild } from "./textIndex";
 import { addRecentFile } from "./recentFiles";
 
 /**
@@ -213,6 +214,8 @@ export async function openDocument(path: string): Promise<void> {
       outline,
     });
     addRecentFile({ path, fileName, numPages: doc.numPages });
+    // M2 全文搜索：预构建逐页文本索引（内部等渲染空闲再分批推进，不阻塞此处）。
+    scheduleTextIndexBuild();
   } catch (error) {
     void destroyDocument(doc);
     if (isStale()) {
