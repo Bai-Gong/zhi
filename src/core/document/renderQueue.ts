@@ -11,6 +11,10 @@ import { useDocumentStore } from "./store";
  *   覆盖新画面（串页）；
  * - 分辨率：物理像素 = viewport(scale) × devicePixelRatio，CSS 尺寸 = viewport(scale)；
  *   单边光栅上限 8192px（Chromium 上限 16384 留余量），超限自动封顶该页缩放。
+ * - 双缓冲：新帧先完整绘入离屏画布，完成后才重设在屏画布尺寸并在同一同步块内
+ *   整帧复制——尺寸重置产生的空白位图永不上屏，缩放重渲期间旧帧按占位框
+ *   CSS 拉伸垫底（pdf.js 以 alpha:false 建上下文，重设在屏画布会露出整页黑位图，
+ *   且填白要等 worker 回传首批指令），消除缩放黑闪。
  */
 
 /** 单边光栅上限（px）。 */
@@ -297,24 +301,31 @@ export class RenderQueue {
     const viewport = page.getViewport({ scale: geometry.cssScale });
     const dpr = window.devicePixelRatio || 1;
     const { canvas } = job;
-    canvas.width = geometry.rasterWidth;
-    canvas.height = geometry.rasterHeight;
-    canvas.style.width = `${geometry.cssWidth}px`;
-    canvas.style.height = `${geometry.cssHeight}px`;
+    // 双缓冲：先把新帧完整绘入离屏画布（重置位图/填白/逐条 ops 全程不上屏），
+    // 成功后在同一同步块内重设在屏画布尺寸并整帧复制——合成器采样不到
+    // 「已重置、未复制」的中间位图；缩放等待期旧帧继续按占位框 CSS 拉伸垫底。
+    const offscreen = document.createElement("canvas");
+    offscreen.width = geometry.rasterWidth;
+    offscreen.height = geometry.rasterHeight;
 
     try {
       const task = page.render({
-        canvas,
+        canvas: offscreen,
         viewport,
         transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined,
       });
       job.runningTask = task;
       await task.promise;
       if (!this.isCurrentOnCanvas(job)) {
-        // 渲染完成后已被取代：不清空画布（新任务即将覆盖），仅结算取消。
+        // 渲染完成后已被取代：不动在屏画布（新任务即将覆盖），仅结算取消。
         job.settle({ status: "cancelled" });
         return;
       }
+      canvas.width = geometry.rasterWidth;
+      canvas.height = geometry.rasterHeight;
+      canvas.style.width = `${geometry.cssWidth}px`;
+      canvas.style.height = `${geometry.cssHeight}px`;
+      canvas.getContext("2d")?.drawImage(offscreen, 0, 0);
       job.settle({ status: "painted", geometry });
     } catch (error) {
       if (job.cancelRequested || error instanceof pdfjsLib.RenderingCancelledException) {
@@ -324,6 +335,9 @@ export class RenderQueue {
       }
     } finally {
       job.runningTask = null;
+      // 归零离屏画布释放位图后备存储（高倍缩放时单帧可达数千万像素）。
+      offscreen.width = 0;
+      offscreen.height = 0;
     }
   }
 }
