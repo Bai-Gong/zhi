@@ -1,0 +1,425 @@
+/* 基础编辑视图局部样式（M5，features/edit）。颜色一律走主题变量（深色自动成立）；
+   骨架类归本模块，.toolbar-group 复用 global.css，按钮样式与 organize 同款。 */
+
+.edit-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.edit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: none;
+  padding: 6px 12px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.edit-toolbar-file {
+  margin-left: 8px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.edit-toolbar-status {
+  margin-left: auto;
+  flex: none;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.edit-text-button {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.edit-text-button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.edit-text-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.edit-text-button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+
+/* ===== 主体：滚动页区 + 右侧属性面板 ===== */
+
+.edit-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.edit-scroller {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 20px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.edit-page-item {
+  position: relative;
+  flex: none;
+  background: #fff;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.18);
+}
+
+.edit-page-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.edit-page-number {
+  position: absolute;
+  right: -44px;
+  top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  user-select: none;
+}
+
+.edit-overlay {
+  position: absolute;
+  inset: 0;
+  /* 双击空白=命中文本进入编辑；对象命中由子元素接管（z 序按数组顺序） */
+  cursor: default;
+}
+
+/* ===== 编辑对象 ===== */
+
+.edit-object {
+  position: absolute;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.edit-object.selected {
+  outline: 1.5px solid var(--accent);
+  outline-offset: -1.5px;
+}
+
+/* 文本对象：白底遮盖 + 浏览器字体所见即所得预览（导出双轨见 editExport） */
+.edit-text {
+  background: #fff;
+  overflow: hidden;
+}
+
+.edit-text-content {
+  display: block;
+  width: 100%;
+  white-space: pre;
+  word-break: break-all;
+}
+
+.edit-text-line {
+  display: block;
+}
+
+.edit-image .edit-image-bitmap {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* 拖拽事件归容器 */
+}
+
+.edit-image-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 12px;
+  color: var(--danger);
+  background: var(--bg-subtle);
+}
+
+/* 图片缩放手柄：四角等比、四边单轴（仅选中态出现） */
+.edit-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 1.5px solid var(--accent);
+  border-radius: 2px;
+  z-index: 2;
+}
+
+.edit-handle.h-nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.edit-handle.h-n  { left: calc(50% - 5px); top: -5px; cursor: ns-resize; }
+.edit-handle.h-ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.edit-handle.h-e  { right: -5px; top: calc(50% - 5px); cursor: ew-resize; }
+.edit-handle.h-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.edit-handle.h-s  { left: calc(50% - 5px); bottom: -5px; cursor: ns-resize; }
+.edit-handle.h-sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.edit-handle.h-w  { left: -5px; top: calc(50% - 5px); cursor: ew-resize; }
+
+/* ===== 属性面板 ===== */
+
+.edit-props {
+  flex: none;
+  width: 264px;
+  padding: 12px 14px;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.edit-props-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.edit-props-group {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.edit-props-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.edit-prop-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.edit-prop-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.edit-prop-field.grow {
+  flex: 1;
+}
+
+.edit-prop-field.column {
+  width: 100%;
+}
+
+.edit-prop-field input,
+.edit-prop-field select,
+.edit-prop-field textarea {
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+}
+
+.edit-prop-field textarea {
+  resize: vertical;
+  min-height: 58px;
+}
+
+.edit-prop-field input:focus,
+.edit-prop-field select:focus,
+.edit-prop-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.edit-toggle {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.edit-toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.edit-colors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.edit-color-swatch {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 0;
+}
+
+.edit-color-swatch.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.edit-colors input[type="color"] {
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  cursor: pointer;
+}
+
+.edit-export-note {
+  margin: 2px 0 0;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+}
+
+.edit-export-note.bitmap {
+  color: var(--danger);
+}
+
+.edit-secondary,
+.edit-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.edit-secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.edit-danger {
+  color: var(--danger);
+}
+
+.edit-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+}
+
+/* ===== 状态页 / 横幅 / toast（与 organize 同款形态） ===== */
+
+.edit-rejection {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--danger);
+  background: var(--bg-panel);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-md);
+}
+
+.edit-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.edit-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 32px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.edit-state-path {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.edit-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+}
+
+.edit-toast-text {
+  word-break: break-all;
+}
+
+.edit-toast-close {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}

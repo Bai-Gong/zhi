@@ -17,6 +17,7 @@ import {
   Maximize2,
   MoveHorizontal,
   PanelLeft,
+  Pencil,
   Search,
   X,
   ZoomIn,
@@ -25,7 +26,7 @@ import {
 import { IconButton } from "../../components/IconButton";
 import { useDocumentStore, activeTabOf } from "../../core/document/store";
 import { HOTKEY_LIST, closeTabAndSyncRoute, openPickedPdf } from "../../shell/hotkeys";
-import { buildOrganizeUrl } from "../../shell/routes";
+import { buildEditUrl, buildOrganizeUrl } from "../../shell/routes";
 import { useUiStore } from "../../shell/uiStore";
 import { clampScale, ZOOM_STEP } from "./pageGeometry";
 import { requestFitWidth } from "./scrollBridge";
@@ -108,6 +109,11 @@ export function ViewerToolbar() {
     if (sourcePath) navigate(buildOrganizeUrl(sourcePath));
   }, [navigate, sourcePath]);
 
+  /** 进入编辑模式（M5）：对当前激活标签的文档开编辑视图（同路径已就绪，编辑页不重载）。 */
+  const handleEdit = useCallback(() => {
+    if (sourcePath) navigate(buildEditUrl(sourcePath));
+  }, [navigate, sourcePath]);
+
   /**
    * 关闭当前（激活）标签：取消其渲染、销毁其 pdf.js 文档后从 store 摘除；
    * 还有其他标签时移交激活位并继续展示，最后一个标签关闭则回到查看器空态。
@@ -144,6 +150,12 @@ export function ViewerToolbar() {
           label="组织页面（旋转/删除/重排/提取）"
           disabled={!hasDocument}
           onClick={handleOrganize}
+        />
+        <IconButton
+          icon={Pencil}
+          label="编辑内容（文本改写/图片增删改）"
+          disabled={!hasDocument}
+          onClick={handleEdit}
         />
         <IconButton icon={PanelLeft} label="折叠/展开侧栏" onClick={toggleSidebar} />
         {fileName && (

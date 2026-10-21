@@ -8,6 +8,7 @@ import { readOutline } from "./outline";
 import { renderQueue } from "./renderQueue";
 import { addRecentFile } from "./recentFiles";
 import { clearOrganizeSession } from "./organizeStore";
+import { clearEditSession } from "./editStore";
 
 /**
  * 打开文件全流程（技术方案 5.1 / 2.3，M2-计划 D1 多标签模型）：
@@ -333,6 +334,8 @@ export async function closeDocument(tabId?: string): Promise<void> {
   activeLoads.delete(id);
   // 组织会话（M3）随标签一并丢弃（纯数据，无 pdf.js 资源）。
   clearOrganizeSession(id);
+  // 编辑会话（M5）同摘：回收图片 objectUrl 与撤销栈。
+  clearEditSession(id);
   // 只有关闭激活标签才清渲染队列：非激活标签没有画面在队列里，
   // 清了会误杀当前激活标签的在途渲染，页面会留白。
   if (state.activeTabId === id) renderQueue.clear();

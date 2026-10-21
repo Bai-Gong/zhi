@@ -258,6 +258,24 @@ export function ensureTabTextIndex(params: {
 function noop(): void {}
 
 /**
+ * 取一页的文本项几何（M5 编辑双击命中用）：必要时建单页索引，返回该页
+ * 全部文本项（str + 用户空间矩阵 + 推进宽度）。标签不可用/换代/该页无文本
+ * 返回 null 或空数组。与搜索共用同一份缓存（不重复解析）。
+ */
+export async function getPageTextItems(tabId: string, pageNumber: number): Promise<readonly SearchTextItem[] | null> {
+  const cache = prepareCache(tabId);
+  if (!cache) return null;
+  const page = Math.min(Math.max(1, Math.round(pageNumber)), cache.numPages);
+  if (!cache.pages[page - 1]) {
+    const built = await ensurePageTextIndex(tabId, page);
+    if (!built) return null;
+  }
+  const after = tabCaches.get(tabId);
+  if (!after || after !== cache || isCacheStale(tabId, cache)) return null;
+  return cache.pages[page - 1]?.items ?? null;
+}
+
+/**
  * 只建单页索引（范围=当前页时避免为一次搜索建整册）：返回 false 表示
  * 标签不可用或该页构建失败。与全量构建互不冲突（全量循环会跳过已建页）。
  */

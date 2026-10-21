@@ -16,6 +16,8 @@ interface ToolCardsProps {
   onOpenReader: () => void;
   /** 启动页面组织（M3）：弹出文件选择框并进入组织视图。 */
   onOpenOrganize: () => void;
+  /** 启动内容编辑（M5）：弹出文件选择框并进入编辑视图。 */
+  onOpenEdit: () => void;
   /** 进入「合并 PDF」向导（M4）：文件选择在向导第一步完成。 */
   onOpenMerge: () => void;
   /** 进入「拆分 PDF」向导（M4）：文件选择在向导第一步完成。 */
@@ -73,7 +75,7 @@ const TOOLS: ToolCard[] = [
     title: "内容编辑",
     description: "编辑 PDF 中的文本与图片",
     icon: Pencil,
-    available: false,
+    available: true,
   },
   {
     id: "convert",
@@ -92,10 +94,11 @@ const TOOLS: ToolCard[] = [
 ];
 
 /** 功能入口卡片：可用工具可点击进入，未上线工具置灰并标「未上线」。 */
-export function ToolCards({ onOpenReader, onOpenOrganize, onOpenMerge, onOpenSplit }: ToolCardsProps) {
-  /** 可用工具各自的进入方式：阅读查看与页面组织从「选文件」开始；向导工具直进向导。 */
+export function ToolCards({ onOpenReader, onOpenOrganize, onOpenEdit, onOpenMerge, onOpenSplit }: ToolCardsProps) {
+  /** 可用工具各自的进入方式：阅读查看、页面组织与内容编辑从「选文件」开始；向导工具直进向导。 */
   const entryOf = (id: string): (() => void) | null => {
     if (id === "organize") return onOpenOrganize;
+    if (id === "edit") return onOpenEdit;
     if (id === "merge") return onOpenMerge;
     if (id === "split") return onOpenSplit;
     if (id === "reader") return onOpenReader;

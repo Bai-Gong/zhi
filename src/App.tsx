@@ -3,6 +3,7 @@ import { AppShell } from "./shell/AppShell";
 import { HomePage } from "./features/home/HomePage";
 import { ViewerPage } from "./features/viewer/ViewerPage";
 import { OrganizePage } from "./features/organize/OrganizePage";
+import { EditPage } from "./features/edit/EditPage";
 import { ToolWizardPage } from "./features/tools/ToolWizardPage";
 
 /**
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/viewer" element={<ViewerPage />} />
           <Route path="/organize" element={<OrganizePage />} />
+          <Route path="/edit" element={<EditPage />} />
           <Route path="/tools/:toolId" element={<ToolWizardPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

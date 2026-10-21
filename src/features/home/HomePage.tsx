@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FilePlus2 } from "lucide-react";
 import { pickPdfFile } from "../../core/document/openDocument";
-import { buildOrganizeUrl, buildToolWizardUrl, buildViewerUrl } from "../../shell/routes";
+import { buildEditUrl, buildOrganizeUrl, buildToolWizardUrl, buildViewerUrl } from "../../shell/routes";
 import { RecentFileList } from "./RecentFileList";
 import { ToolCards } from "./ToolCards";
 import "./home.css";
@@ -44,6 +44,17 @@ export function HomePage() {
     }
   }, [navigate]);
 
+  /** 内容编辑入口（M5）：选文件后进入编辑视图（装载由编辑页按 path 触发）。 */
+  const handleOpenEdit = useCallback(async () => {
+    setOpenError(null);
+    try {
+      const path = await pickPdfFile();
+      if (path) navigate(buildEditUrl(path));
+    } catch (error) {
+      setOpenError(error instanceof Error ? error.message : String(error));
+    }
+  }, [navigate]);
+
   /** 合并/拆分向导入口（M4）：直进向导第一步选文件（向导自持文件列表）。 */
   const openToolWizard = useCallback(
     (toolId: string) => navigate(buildToolWizardUrl(toolId)),
@@ -68,6 +79,7 @@ export function HomePage() {
       <ToolCards
         onOpenReader={() => void handleOpen()}
         onOpenOrganize={() => void handleOpenOrganize()}
+        onOpenEdit={() => void handleOpenEdit()}
         onOpenMerge={() => openToolWizard("merge")}
         onOpenSplit={() => openToolWizard("split")}
       />

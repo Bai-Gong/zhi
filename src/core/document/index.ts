@@ -29,3 +29,33 @@ export type { RenderHandle, RenderOutcome, RenderGeometry } from "./renderQueue"
 
 export { renderTextLayer } from "./textLayer";
 export type { TextLayerHandle } from "./textLayer";
+
+export { getPageTextItems } from "./textIndex";
+
+export { useEditStore, EDIT_UNDO_LIMIT } from "./editStore";
+export type { EditSnapshot } from "./editStore";
+export {
+  EDIT_FONTS,
+  COVER_PADDING,
+  TEXT_LINE_HEIGHT,
+  editFontSpec,
+  isVectorText,
+  userPointToCss,
+  cssPointToUser,
+  userRectToCssRect,
+  cssRectToUserRect,
+  textItemRect,
+  hitTextItem,
+  makeEditObjectId,
+  roundPt,
+} from "./editModel";
+export type {
+  EditFontId,
+  EditFontSpec,
+  EditTransform,
+  EditCssRect,
+  EditObject,
+  TextEditObject,
+  ImageEditObject,
+  EditImageAsset,
+} from "./editModel";

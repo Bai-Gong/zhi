@@ -10,6 +10,8 @@ export const ROUTES = {
   viewer: "/viewer",
   /** 页面组织（M3，独立全屏模式：缩略图网格重排/旋转/删除/提取/另存副本） */
   organize: "/organize",
+  /** 基础编辑（M5，独立全屏模式：文本覆盖改写/图片增删改/属性面板/撤销重做） */
+  edit: "/edit",
   /** 工具向导（M4）：/tools/:toolId，工具集见 features/tools/registry.ts */
   toolWizard: "/tools",
 } as const;
@@ -22,6 +24,11 @@ export function buildViewerUrl(path?: string): string {
 /** 组织页地址：与查看器同款 path 查询参数（同路径标签已就绪时不重载）。 */
 export function buildOrganizeUrl(path?: string): string {
   return path ? `${ROUTES.organize}?path=${encodeURIComponent(path)}` : ROUTES.organize;
+}
+
+/** 编辑页地址：与查看器同款 path 查询参数（同路径标签已就绪时不重载）。 */
+export function buildEditUrl(path?: string): string {
+  return path ? `${ROUTES.edit}?path=${encodeURIComponent(path)}` : ROUTES.edit;
 }
 
 /** 工具向导地址：按注册表的工具 id 生成（/tools/merge、/tools/split…）。 */
