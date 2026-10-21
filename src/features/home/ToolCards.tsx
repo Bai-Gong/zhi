@@ -1,8 +1,11 @@
 import type { ComponentType } from "react";
 import {
   BookOpen,
+  FileDown,
   FileOutput,
+  FileText,
   Highlighter,
+  Images,
   LayoutGrid,
   Pencil,
   Save,
@@ -22,6 +25,8 @@ interface ToolCardsProps {
   onOpenMerge: () => void;
   /** 进入「拆分 PDF」向导（M4）：文件选择在向导第一步完成。 */
   onOpenSplit: () => void;
+  /** 进入格式转换向导（M6）：按注册表工具 id 直进向导（文件选择在向导内完成）。 */
+  onOpenToolWizard: (toolId: string) => void;
 }
 
 interface ToolCard {
@@ -31,9 +36,11 @@ interface ToolCard {
   icon: ComponentType<IconComponentProps>;
   /** 上线状态：未上线工具置灰（技术方案 4.1 模块 2）。 */
   available: boolean;
+  /** 向导工具 id（M4/M6 的向导类卡片）：点击直进 /tools/:toolId。 */
+  toolId?: string;
 }
 
-/** 功能入口（对齐产品分析的必备核心能力清单；M4 起合并/拆分以工具向导上线）。 */
+/** 功能入口（对齐产品分析的必备核心能力清单；M4 合并/拆分与 M6 格式转换以工具向导上线）。 */
 const TOOLS: ToolCard[] = [
   {
     id: "reader",
@@ -78,11 +85,36 @@ const TOOLS: ToolCard[] = [
     available: true,
   },
   {
-    id: "convert",
-    title: "格式转换",
-    description: "PDF 与 Word、图片互转",
+    id: "pdf-to-images",
+    title: "PDF 转图片",
+    description: "逐页导出 PNG/JPG（96/192 dpi），文件名带页码",
     icon: FileOutput,
-    available: false,
+    available: true,
+    toolId: "pdf-to-images",
+  },
+  {
+    id: "images-to-pdf",
+    title: "图片转 PDF",
+    description: "多张图片按顺序合成 PDF，可设页面与边距",
+    icon: Images,
+    available: true,
+    toolId: "images-to-pdf",
+  },
+  {
+    id: "pdf-to-word",
+    title: "PDF 转 Word",
+    description: "文本型 PDF 转 .docx，按阅读顺序重建段落",
+    icon: FileText,
+    available: true,
+    toolId: "pdf-to-word",
+  },
+  {
+    id: "word-to-pdf",
+    title: "Word 转 PDF",
+    description: ".docx 转 PDF，基础版式：标题/正文/图片/表格",
+    icon: FileDown,
+    available: true,
+    toolId: "word-to-pdf",
   },
   {
     id: "export",
@@ -94,14 +126,22 @@ const TOOLS: ToolCard[] = [
 ];
 
 /** 功能入口卡片：可用工具可点击进入，未上线工具置灰并标「未上线」。 */
-export function ToolCards({ onOpenReader, onOpenOrganize, onOpenEdit, onOpenMerge, onOpenSplit }: ToolCardsProps) {
+export function ToolCards({
+  onOpenReader,
+  onOpenOrganize,
+  onOpenEdit,
+  onOpenMerge,
+  onOpenSplit,
+  onOpenToolWizard,
+}: ToolCardsProps) {
   /** 可用工具各自的进入方式：阅读查看、页面组织与内容编辑从「选文件」开始；向导工具直进向导。 */
-  const entryOf = (id: string): (() => void) | null => {
-    if (id === "organize") return onOpenOrganize;
-    if (id === "edit") return onOpenEdit;
-    if (id === "merge") return onOpenMerge;
-    if (id === "split") return onOpenSplit;
-    if (id === "reader") return onOpenReader;
+  const entryOf = (tool: ToolCard): (() => void) | null => {
+    if (tool.id === "organize") return onOpenOrganize;
+    if (tool.id === "edit") return onOpenEdit;
+    if (tool.id === "merge") return onOpenMerge;
+    if (tool.id === "split") return onOpenSplit;
+    if (tool.id === "reader") return onOpenReader;
+    if (tool.toolId) return () => onOpenToolWizard(tool.toolId as string);
     return null;
   };
   return (
@@ -119,7 +159,7 @@ export function ToolCards({ onOpenReader, onOpenOrganize, onOpenEdit, onOpenMerg
               <span className="tool-card-desc">{tool.description}</span>
             </>
           );
-          const onClick = entryOf(tool.id);
+          const onClick = entryOf(tool);
           if (!tool.available || !onClick) {
             return (
               <div key={tool.id} className="tool-card unavailable" aria-disabled="true">

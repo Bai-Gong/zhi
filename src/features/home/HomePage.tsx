@@ -82,6 +82,7 @@ export function HomePage() {
         onOpenEdit={() => void handleOpenEdit()}
         onOpenMerge={() => openToolWizard("merge")}
         onOpenSplit={() => openToolWizard("split")}
+        onOpenToolWizard={openToolWizard}
       />
     </div>
   );
