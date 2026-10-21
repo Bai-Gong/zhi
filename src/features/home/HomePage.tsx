@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FilePlus2 } from "lucide-react";
 import { pickPdfFile } from "../../core/document/openDocument";
-import { buildOrganizeUrl, buildViewerUrl } from "../../shell/routes";
+import { buildOrganizeUrl, buildToolWizardUrl, buildViewerUrl } from "../../shell/routes";
 import { RecentFileList } from "./RecentFileList";
 import { ToolCards } from "./ToolCards";
 import "./home.css";
@@ -44,6 +44,12 @@ export function HomePage() {
     }
   }, [navigate]);
 
+  /** 合并/拆分向导入口（M4）：直进向导第一步选文件（向导自持文件列表）。 */
+  const openToolWizard = useCallback(
+    (toolId: string) => navigate(buildToolWizardUrl(toolId)),
+    [navigate],
+  );
+
   return (
     <div className="home-page">
       <section className="home-hero">
@@ -59,7 +65,12 @@ export function HomePage() {
         <p className="home-hint">选择本地 PDF 文件，在查看器中阅读、缩放与翻页。</p>
       </section>
       <RecentFileList onOpen={openViewer} />
-      <ToolCards onOpenReader={() => void handleOpen()} onOpenOrganize={() => void handleOpenOrganize()} />
+      <ToolCards
+        onOpenReader={() => void handleOpen()}
+        onOpenOrganize={() => void handleOpenOrganize()}
+        onOpenMerge={() => openToolWizard("merge")}
+        onOpenSplit={() => openToolWizard("split")}
+      />
     </div>
   );
 }

@@ -1,0 +1,211 @@
+/* 工具向导配置面板局部样式（M4，features/tools）。颜色一律走主题变量。 */
+
+.tool-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tool-panel-lead {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 每文件一行（合并：文件名 + 范围输入） */
+.tool-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.tool-row + .tool-row {
+  margin-top: 6px;
+}
+
+.tool-row-index {
+  width: 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  flex: none;
+}
+
+.tool-row-name {
+  min-width: 0;
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-primary);
+  flex: none;
+}
+
+.tool-row-meta {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tool-row-input {
+  flex: 1;
+  min-width: 120px;
+  padding: 5px 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.tool-row-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tool-row-input.narrow {
+  flex: none;
+  width: 90px;
+}
+
+.tool-row-hint {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tool-row-hint.invalid {
+  color: var(--danger);
+}
+
+/* 复选说明行 */
+.tool-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.tool-note {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.tool-note.invalid {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.tool-note-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 模式选择（拆分三模式） */
+.tool-modes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tool-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 160px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.tool-mode:hover {
+  border-color: var(--accent);
+}
+
+.tool-mode.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.tool-mode input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tool-mode-label {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.tool-mode-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* 单字段行 */
+.tool-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.tool-field label {
+  flex: none;
+}
+
+/* 输出文件名预览 */
+.tool-preview {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.tool-preview li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.tool-preview li + li {
+  border-top: 1px dashed var(--border);
+}
+
+.tool-preview-more {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.tool-export-name {
+  min-width: 0;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}

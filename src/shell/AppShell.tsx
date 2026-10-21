@@ -17,6 +17,12 @@ const PAGE_TITLES: Record<string, string> = {
   [ROUTES.organize]: "页面组织",
 };
 
+/** 路由 → 窗口标题（/tools/* 按前缀归「工具向导」）。 */
+function pageTitleOf(pathname: string): string {
+  if (pathname.startsWith(ROUTES.toolWizard)) return "工具向导";
+  return PAGE_TITLES[pathname] ?? "百工·纸";
+}
+
 /** 沉浸模式边缘唤出阈值（T7）：顶缘 8px 内唤出；鼠标越过唤出后的界面高度再收起。 */
 const IMMERSIVE_REVEAL_PX = 8;
 /** 收起阈值 ≈ 顶栏 48 + 标签条 34 + 工具栏 42 + 余量；与 ViewerPage 侧常量保持一致。 */
@@ -61,7 +67,7 @@ export function AppShell() {
 
   // 路由驱动的窗口标题
   useEffect(() => {
-    document.title = `百工·纸 · ${PAGE_TITLES[location.pathname] ?? "百工·纸"}`;
+    document.title = `百工·纸 · ${pageTitleOf(location.pathname)}`;
   }, [location.pathname]);
 
   return (

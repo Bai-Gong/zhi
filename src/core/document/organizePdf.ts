@@ -67,13 +67,18 @@ export function applyOrganization(
 
 // ===== 悬空书签清理（PDF 32000-1 12.3.3） =====
 
+/**
+ * 以下低层辅助自 M4 起导出供本目录 mergeSplit.ts 复用（读顶级书签走同一套
+ * dest 解析，不复制实现）；仍不入 core/document/index.ts 桶导出（pdf-lib 符号）。
+ */
+
 /** PDFRef 的稳定键（objectNumber:generation）。 */
-function refKey(ref: PDFRef): string {
+export function refKey(ref: PDFRef): string {
   return `${ref.objectNumber}:${ref.generationNumber}`;
 }
 
 /** 字典条目读取（PDFName.of 一次封装）。 */
-function entryOf(dict: PDFDict, name: string): PDFObject | undefined {
+export function entryOf(dict: PDFDict, name: string): PDFObject | undefined {
   return dict.get(PDFName.of(name));
 }
 
@@ -84,7 +89,7 @@ function setEntry(dict: PDFDict, name: string, value: PDFObject | undefined): vo
 }
 
 /** 解析条目值：引用则解引用，直接对象原样返回。 */
-function resolve(pdf: PDFDocument, value: PDFObject | undefined): PDFObject | undefined {
+export function resolve(pdf: PDFDocument, value: PDFObject | undefined): PDFObject | undefined {
   return value instanceof PDFRef ? pdf.context.lookup(value) : value;
 }
 
@@ -104,7 +109,7 @@ function explicitDestOf(dest: PDFObject | undefined, namedDests: Map<string, PDF
 }
 
 /** 收集 /Names → /Dests 名字树的 name → dest 数组映射（递归 Kids，带防御上限）。 */
-function collectNamedDests(pdf: PDFDocument, destsRoot: PDFDict): Map<string, PDFArray> {
+export function collectNamedDests(pdf: PDFDocument, destsRoot: PDFDict): Map<string, PDFArray> {
   const map = new Map<string, PDFArray>();
   const visit = (node: PDFDict, depth: number): void => {
     if (depth > 32 || map.size > 5000) return; // 防御：异常名字树直接截断
@@ -237,7 +242,7 @@ export function pruneOrphanBookmarks(pdf: PDFDocument, keptKeys: Set<string>): n
 }
 
 /** 书签的目标页键（显式 dest 或命名 dest 的第一个元素）；无页目标返回 null。 */
-function destPageKey(pdf: PDFDocument, item: PDFDict, namedDests: Map<string, PDFArray>): string | null {
+export function destPageKey(pdf: PDFDocument, item: PDFDict, namedDests: Map<string, PDFArray>): string | null {
   const dest = entryOf(item, "Dest");
   if (dest !== undefined) {
     const explicit = explicitDestOf(resolve(pdf, dest), namedDests);

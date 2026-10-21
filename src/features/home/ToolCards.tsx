@@ -2,11 +2,12 @@ import type { ComponentType } from "react";
 import {
   BookOpen,
   FileOutput,
-  Files,
   Highlighter,
   LayoutGrid,
   Pencil,
   Save,
+  Scissors,
+  Files,
 } from "lucide-react";
 import type { IconComponentProps } from "../../components/IconButton";
 
@@ -15,6 +16,10 @@ interface ToolCardsProps {
   onOpenReader: () => void;
   /** 启动页面组织（M3）：弹出文件选择框并进入组织视图。 */
   onOpenOrganize: () => void;
+  /** 进入「合并 PDF」向导（M4）：文件选择在向导第一步完成。 */
+  onOpenMerge: () => void;
+  /** 进入「拆分 PDF」向导（M4）：文件选择在向导第一步完成。 */
+  onOpenSplit: () => void;
 }
 
 interface ToolCard {
@@ -22,11 +27,11 @@ interface ToolCard {
   title: string;
   description: string;
   icon: ComponentType<IconComponentProps>;
-  /** 上线状态：MVP 仅「阅读查看」可用，其余置灰（技术方案 4.1 模块 2）。 */
+  /** 上线状态：未上线工具置灰（技术方案 4.1 模块 2）。 */
   available: boolean;
 }
 
-/** 功能入口（对齐产品分析的必备核心能力清单，独立工具向导页后续里程碑上线）。 */
+/** 功能入口（对齐产品分析的必备核心能力清单；M4 起合并/拆分以工具向导上线）。 */
 const TOOLS: ToolCard[] = [
   {
     id: "reader",
@@ -36,11 +41,18 @@ const TOOLS: ToolCard[] = [
     available: true,
   },
   {
-    id: "merge-split",
-    title: "合并拆分",
-    description: "多个 PDF 合并成册，或拆分导出页面",
+    id: "merge",
+    title: "合并 PDF",
+    description: "多个 PDF 按顺序合并成册，可按页码范围选取",
     icon: Files,
-    available: false,
+    available: true,
+  },
+  {
+    id: "split",
+    title: "拆分 PDF",
+    description: "按每 N 页、顶级书签或页码范围拆分导出",
+    icon: Scissors,
+    available: true,
   },
   {
     id: "organize",
@@ -80,7 +92,15 @@ const TOOLS: ToolCard[] = [
 ];
 
 /** 功能入口卡片：可用工具可点击进入，未上线工具置灰并标「未上线」。 */
-export function ToolCards({ onOpenReader, onOpenOrganize }: ToolCardsProps) {
+export function ToolCards({ onOpenReader, onOpenOrganize, onOpenMerge, onOpenSplit }: ToolCardsProps) {
+  /** 可用工具各自的进入方式：阅读查看与页面组织从「选文件」开始；向导工具直进向导。 */
+  const entryOf = (id: string): (() => void) | null => {
+    if (id === "organize") return onOpenOrganize;
+    if (id === "merge") return onOpenMerge;
+    if (id === "split") return onOpenSplit;
+    if (id === "reader") return onOpenReader;
+    return null;
+  };
   return (
     <section className="home-section" aria-label="功能入口">
       <h2 className="home-section-title">工具箱</h2>
@@ -96,7 +116,8 @@ export function ToolCards({ onOpenReader, onOpenOrganize }: ToolCardsProps) {
               <span className="tool-card-desc">{tool.description}</span>
             </>
           );
-          if (!tool.available) {
+          const onClick = entryOf(tool.id);
+          if (!tool.available || !onClick) {
             return (
               <div key={tool.id} className="tool-card unavailable" aria-disabled="true">
                 {body}
@@ -104,8 +125,6 @@ export function ToolCards({ onOpenReader, onOpenOrganize }: ToolCardsProps) {
               </div>
             );
           }
-          // 可用工具各自绑定入口：阅读查看与页面组织都从「选文件」开始。
-          const onClick = tool.id === "organize" ? onOpenOrganize : onOpenReader;
           return (
             <button key={tool.id} type="button" className="tool-card" onClick={onClick}>
               {body}
