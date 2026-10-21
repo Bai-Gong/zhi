@@ -8,7 +8,8 @@ import {
   withStandalonePdf,
   type ConvertControl,
 } from "./convertCommon";
-import { buildLines, groupParagraphs, type TextLine } from "./convertLayout";
+import { buildLines, groupParagraphs, isRawTextItem, readingMatrixOf, type TextLine } from "./convertLayout";
+import { pdfjsLib } from "./pdfjs";
 import { paginateWordHtml, type WordPdfPaper } from "./wordPagination";
 
 /**
@@ -64,7 +65,18 @@ export async function runPdfToWord(
       let lines: TextLine[] = [];
       try {
         const content = await page.getTextContent();
-        lines = buildLines(content.items);
+        // 文本项坐标是未应用 /Rotate 的用户空间坐标（渲染与文本层链路都经
+        // viewport 归一，文本转换链路此前漏了）：/Rotate=90/270 的横向页（横向
+        // 表格、PPT 导出）会行列颠倒。先按页面旋转折算到阅读朝向再聚行；矩阵
+        // 复合复用 pdf.js 的 Util.transform（textLayer 内部同款），0° 页矩阵为
+        // 恒等、行为不变。
+        const viewport = page.getViewport({ scale: 1 });
+        const matrix = readingMatrixOf(viewport.transform, viewport.height);
+        lines = buildLines(
+          content.items.map((item) =>
+            isRawTextItem(item) ? { ...item, transform: pdfjsLib.Util.transform(matrix, item.transform) } : item,
+          ),
+        );
       } catch (error) {
         // 单页失败按空页落空，不拖垮整册（与 textIndex 同口径）。
         console.warn(`第 ${pageNumber} 页文本提取失败：`, error);
