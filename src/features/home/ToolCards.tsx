@@ -13,6 +13,8 @@ import type { IconComponentProps } from "../../components/IconButton";
 interface ToolCardsProps {
   /** 启动阅读工具：弹出文件选择框并进入查看器。 */
   onOpenReader: () => void;
+  /** 启动页面组织（M3）：弹出文件选择框并进入组织视图。 */
+  onOpenOrganize: () => void;
 }
 
 interface ToolCard {
@@ -45,7 +47,7 @@ const TOOLS: ToolCard[] = [
     title: "页面组织",
     description: "旋转、删除、重排与提取页面",
     icon: LayoutGrid,
-    available: false,
+    available: true,
   },
   {
     id: "annotate",
@@ -78,7 +80,7 @@ const TOOLS: ToolCard[] = [
 ];
 
 /** 功能入口卡片：可用工具可点击进入，未上线工具置灰并标「未上线」。 */
-export function ToolCards({ onOpenReader }: ToolCardsProps) {
+export function ToolCards({ onOpenReader, onOpenOrganize }: ToolCardsProps) {
   return (
     <section className="home-section" aria-label="功能入口">
       <h2 className="home-section-title">工具箱</h2>
@@ -94,15 +96,20 @@ export function ToolCards({ onOpenReader }: ToolCardsProps) {
               <span className="tool-card-desc">{tool.description}</span>
             </>
           );
-          return tool.available ? (
-            <button key={tool.id} type="button" className="tool-card" onClick={onOpenReader}>
+          if (!tool.available) {
+            return (
+              <div key={tool.id} className="tool-card unavailable" aria-disabled="true">
+                {body}
+                <span className="tool-badge">未上线</span>
+              </div>
+            );
+          }
+          // 可用工具各自绑定入口：阅读查看与页面组织都从「选文件」开始。
+          const onClick = tool.id === "organize" ? onOpenOrganize : onOpenReader;
+          return (
+            <button key={tool.id} type="button" className="tool-card" onClick={onClick}>
               {body}
             </button>
-          ) : (
-            <div key={tool.id} className="tool-card unavailable" aria-disabled="true">
-              {body}
-              <span className="tool-badge">未上线</span>
-            </div>
           );
         })}
       </div>

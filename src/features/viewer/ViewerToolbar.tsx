@@ -13,6 +13,7 @@ import {
   FileX,
   FolderOpen,
   Keyboard,
+  LayoutGrid,
   Maximize2,
   MoveHorizontal,
   PanelLeft,
@@ -24,6 +25,7 @@ import {
 import { IconButton } from "../../components/IconButton";
 import { useDocumentStore, activeTabOf } from "../../core/document/store";
 import { HOTKEY_LIST, closeTabAndSyncRoute, openPickedPdf } from "../../shell/hotkeys";
+import { buildOrganizeUrl } from "../../shell/routes";
 import { useUiStore } from "../../shell/uiStore";
 import { clampScale, ZOOM_STEP } from "./pageGeometry";
 import { requestFitWidth } from "./scrollBridge";
@@ -68,6 +70,7 @@ export function ViewerToolbar() {
   const currentPage = tab.currentPage;
   const scale = tab.scale;
   const fileName = tab.fileName;
+  const sourcePath = tab.sourcePath;
   const setCurrentPage = useDocumentStore((s) => s.setCurrentPage);
   const setScale = useDocumentStore((s) => s.setScale);
 
@@ -100,6 +103,11 @@ export function ViewerToolbar() {
   /** 查看器内「打开」（技术方案 5.1）：与 Ctrl+O / 标签条「+」共用同一实现。 */
   const handleOpen = useCallback(() => void openPickedPdf(navigate), [navigate]);
 
+  /** 进入组织模式（M3）：对当前激活标签的文档开组织视图（同路径已就绪，组织页不重载）。 */
+  const handleOrganize = useCallback(() => {
+    if (sourcePath) navigate(buildOrganizeUrl(sourcePath));
+  }, [navigate, sourcePath]);
+
   /**
    * 关闭当前（激活）标签：取消其渲染、销毁其 pdf.js 文档后从 store 摘除；
    * 还有其他标签时移交激活位并继续展示，最后一个标签关闭则回到查看器空态。
@@ -131,6 +139,12 @@ export function ViewerToolbar() {
       <div className="toolbar-group">
         <IconButton icon={FolderOpen} label="打开 PDF 文件（Ctrl+O）" onClick={handleOpen} />
         <IconButton icon={FileX} label="关闭文档（Ctrl+W）" disabled={!hasDocument} onClick={handleClose} />
+        <IconButton
+          icon={LayoutGrid}
+          label="组织页面（旋转/删除/重排/提取）"
+          disabled={!hasDocument}
+          onClick={handleOrganize}
+        />
         <IconButton icon={PanelLeft} label="折叠/展开侧栏" onClick={toggleSidebar} />
         {fileName && (
           <span className="viewer-toolbar-file" title={fileName}>

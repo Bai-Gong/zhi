@@ -82,8 +82,13 @@ export function ViewerPage() {
   }, [immersive]);
   const chromeVisible = !immersive || immersivePeek;
 
+  // 路由参数驱动装载（技术方案 5.1）：换文件或首次进入才装载；同路径标签已就绪
+  // 则跳过（M3：从组织视图返回时不重载，页码/缩放与未导出的组织状态一并保留）。
   useEffect(() => {
-    if (path) void openDocument(path);
+    if (!path) return;
+    const current = activeTabOf(useDocumentStore.getState());
+    if (current.status === "ready" && current.sourcePath === path) return;
+    void openDocument(path);
   }, [path]);
 
   // ===== 页面基准尺寸（虚拟化占位与适应宽度计算的依据） =====

@@ -21,6 +21,9 @@ export { openDocument, closeDocument, pickPdfFile, getPage } from "./openDocumen
 export { loadRecentFiles, addRecentFile, removeRecentFile } from "./recentFiles";
 export type { RecentFile } from "./recentFiles";
 
+export { useOrganizeStore, organizeOf, EMPTY_ORGANIZE } from "./organizeStore";
+export type { OrganizeSnapshot } from "./organizeStore";
+
 export { renderQueue, RenderQueue, capScaleForRaster, MAX_RASTER_EDGE, RENDER_PRIORITY } from "./renderQueue";
 export type { RenderHandle, RenderOutcome, RenderGeometry } from "./renderQueue";
 

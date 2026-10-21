@@ -2,6 +2,7 @@ import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./shell/AppShell";
 import { HomePage } from "./features/home/HomePage";
 import { ViewerPage } from "./features/viewer/ViewerPage";
+import { OrganizePage } from "./features/organize/OrganizePage";
 
 /**
  * 应用外壳与路由（模块 1）。
@@ -15,6 +16,7 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/viewer" element={<ViewerPage />} />
+          <Route path="/organize" element={<OrganizePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

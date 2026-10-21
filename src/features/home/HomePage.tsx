@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FilePlus2 } from "lucide-react";
 import { pickPdfFile } from "../../core/document/openDocument";
-import { buildViewerUrl } from "../../shell/routes";
+import { buildOrganizeUrl, buildViewerUrl } from "../../shell/routes";
 import { RecentFileList } from "./RecentFileList";
 import { ToolCards } from "./ToolCards";
 import "./home.css";
@@ -33,6 +33,17 @@ export function HomePage() {
     }
   }, [openViewer]);
 
+  /** 页面组织入口（M3）：选文件后进入组织视图（装载由组织页按 path 触发）。 */
+  const handleOpenOrganize = useCallback(async () => {
+    setOpenError(null);
+    try {
+      const path = await pickPdfFile();
+      if (path) navigate(buildOrganizeUrl(path));
+    } catch (error) {
+      setOpenError(error instanceof Error ? error.message : String(error));
+    }
+  }, [navigate]);
+
   return (
     <div className="home-page">
       <section className="home-hero">
@@ -48,7 +59,7 @@ export function HomePage() {
         <p className="home-hint">选择本地 PDF 文件，在查看器中阅读、缩放与翻页。</p>
       </section>
       <RecentFileList onOpen={openViewer} />
-      <ToolCards onOpenReader={() => void handleOpen()} />
+      <ToolCards onOpenReader={() => void handleOpen()} onOpenOrganize={() => void handleOpenOrganize()} />
     </div>
   );
 }

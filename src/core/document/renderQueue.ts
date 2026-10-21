@@ -53,10 +53,10 @@ export function capScaleForRaster(pageWidth: number, pageHeight: number, scale: 
   return Math.max(MIN_SCALE, MAX_RASTER_EDGE / (Math.max(pageWidth, pageHeight) * dpr));
 }
 
-function computeGeometry(page: PDFPageProxy, requestedScale: number): RenderGeometry {
-  const base = page.getViewport({ scale: 1 });
+function computeGeometry(page: PDFPageProxy, requestedScale: number, rotationOverride?: number): RenderGeometry {
+  const base = page.getViewport({ scale: 1, rotation: rotationOverride });
   const cssScale = capScaleForRaster(base.width, base.height, requestedScale);
-  const viewport = page.getViewport({ scale: cssScale });
+  const viewport = page.getViewport({ scale: cssScale, rotation: rotationOverride });
   const dpr = window.devicePixelRatio || 1;
   return {
     cssScale,
@@ -91,6 +91,8 @@ interface QueueJob {
   providePage: () => Promise<PDFPageProxy>;
   /** 依据页面实际尺寸决定 CSS 缩放（整页=固定值；缩略图=按边长适配）。 */
   resolveScale: (page: PDFPageProxy) => number;
+  /** 覆盖页面旋转角（度；缺省用页面自身 /Rotate）。M3 组织视图按旋转增量预览用。 */
+  rotationOverride: number | undefined;
   cancelRequested: boolean;
   runningTask: { cancel(): void } | null;
   settle: (outcome: RenderOutcome) => void;
@@ -129,6 +131,7 @@ export class RenderQueue {
       generation: request.generation,
       providePage: () => Promise.resolve(request.page),
       resolveScale: () => request.scale,
+      rotationOverride: undefined,
     });
   }
 
@@ -151,10 +154,16 @@ export class RenderQueue {
       generation: request.generation,
       providePage: () => getPageOrThrow(pageNumber),
       resolveScale: () => request.scale,
+      rotationOverride: undefined,
     });
   }
 
-  /** 缩略图渲染（与整页渲染同源，技术方案 4.3 规则 1）：按最长边适配。 */
+  /**
+   * 缩略图渲染（与整页渲染同源，技术方案 4.3 规则 1）：按最长边适配。
+   * `rotation`（0/90/180/270）覆盖页面 /Rotate——M3 组织视图的旋转预览与侧栏
+   * 共用本接口；pdf.js 的 viewport rotation 语义是「替换」而非「叠加」，
+   * 调用方须传 原角+增量 的合成值（页面自身旋转 + 组织旋转增量）。
+   */
   renderThumbnail(request: {
     pageNumber: number;
     canvas: HTMLCanvasElement;
@@ -162,18 +171,22 @@ export class RenderQueue {
     maxEdge?: number;
     priority?: number;
     generation?: number;
+    /** 覆盖旋转角（度）；缺省渲染页面自身朝向（与侧栏行为一致）。 */
+    rotation?: number;
   }): RenderHandle {
     const pageNumber = request.pageNumber;
     const maxEdge = request.maxEdge ?? 160;
+    const rotation = request.rotation;
     return this.submit({
       canvas: request.canvas,
       priority: request.priority ?? RENDER_PRIORITY.thumbnail,
       generation: request.generation,
       providePage: () => getPageOrThrow(pageNumber),
       resolveScale: (page) => {
-        const base = page.getViewport({ scale: 1 });
+        const base = page.getViewport({ scale: 1, rotation });
         return capScaleForRaster(base.width, base.height, maxEdge / Math.max(base.width, base.height));
       },
+      rotationOverride: rotation,
     });
   }
 
@@ -204,6 +217,7 @@ export class RenderQueue {
     generation?: number;
     providePage: () => Promise<PDFPageProxy>;
     resolveScale: (page: PDFPageProxy) => number;
+    rotationOverride: number | undefined;
   }): RenderHandle {
     const storeGeneration = input.generation === undefined;
     // 默认代际令牌来自激活标签（多标签下各标签代际互不单调，故用全等比对：
@@ -222,6 +236,7 @@ export class RenderQueue {
       canvas: input.canvas,
       providePage: input.providePage,
       resolveScale: input.resolveScale,
+      rotationOverride: input.rotationOverride,
       cancelRequested: false,
       runningTask: null,
       settle: () => undefined,
@@ -314,8 +329,8 @@ export class RenderQueue {
       return;
     }
 
-    const geometry = computeGeometry(page, job.resolveScale(page));
-    const viewport = page.getViewport({ scale: geometry.cssScale });
+    const geometry = computeGeometry(page, job.resolveScale(page), job.rotationOverride);
+    const viewport = page.getViewport({ scale: geometry.cssScale, rotation: job.rotationOverride });
     const dpr = window.devicePixelRatio || 1;
     const { canvas } = job;
     // 双缓冲：先画到队列私有的离屏画布。若在这里就对可见画布赋 width/height，

@@ -36,7 +36,6 @@ export type SaveCopyResult =
   | { status: "saved"; path: string }
   | { status: "cancelled" }
   | { status: "failed"; message: string };
-
 function failed(message: string): SaveCopyResult {
   return { status: "failed", message };
 }
@@ -59,8 +58,9 @@ function suggestCopyName(fileName: string | null): string {
   return `${base}_高亮副本.pdf`;
 }
 
-/** Windows 磁盘路径等同判定：大小写不敏感、正反斜杠归一（防保存对话框选回原文件）。 */
-function sameDiskPath(a: string, b: string): boolean {
+/** Windows 磁盘路径等同判定：大小写不敏感、正反斜杠归一（防保存对话框选回原文件）。
+ *  M3 起导出（pageOrganizeExport）复用，故导出。 */
+export function sameDiskPath(a: string, b: string): boolean {
   const normalize = (p: string) => p.replace(/\//g, "\\").replace(/\\+$/, "\\").toLowerCase();
   return normalize(a) === normalize(b);
 }
@@ -69,8 +69,9 @@ function sameDiskPath(a: string, b: string): boolean {
  * 读原文件字节：主路径 asset 协议（零拷贝流式，与 openDocument.loadFromUrl 同源），
  * 失败自动兜底 plugin-fs.readFile（同 openDocument.loadFromBytes；capabilities 已授
  * fs:allow-read-file + "**" scope）。只读，不构成对原文件的任何写入。
+ * M3 起导出（pageOrganizeExport）复用，故导出。
  */
-async function readSourceBytes(path: string): Promise<Uint8Array> {
+export async function readSourceBytes(path: string): Promise<Uint8Array> {
   try {
     const response = await fetch(convertFileSrc(path));
     if (!response.ok) throw new Error(`asset 协议返回 HTTP ${response.status}`);

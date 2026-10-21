@@ -14,6 +14,7 @@ import "./theme.css";
 const PAGE_TITLES: Record<string, string> = {
   [ROUTES.home]: "首页",
   [ROUTES.viewer]: "查看器",
+  [ROUTES.organize]: "页面组织",
 };
 
 /** 沉浸模式边缘唤出阈值（T7）：顶缘 8px 内唤出；鼠标越过唤出后的界面高度再收起。 */
