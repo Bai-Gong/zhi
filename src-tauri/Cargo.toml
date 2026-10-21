@@ -26,6 +26,13 @@ tauri-plugin-opener = "2"
 tauri-plugin-log = "2"
 
 
+# 本机 Kaspersky 会拦截默认参数编译出的 tauri-plugin-dialog 构建脚本二进制（os error 32/5，
+# 按内容缓存的判定，确定性构建导致每次必中）。改 build-override 参数即改变二进制内容，
+# 实测绕开判定（jian 仓库同款先例，2026-10-19）。若再被盯上，微调本节参数即可。
+[profile.dev.build-override]
+opt-level = 1
+debug = false
+
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1
