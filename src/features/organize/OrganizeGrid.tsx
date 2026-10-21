@@ -66,7 +66,7 @@ export interface OrganizeGridProps {
 }
 
 /** 单页缩略图：懒渲染 + 旋转变化重绘（渲染只经 core 缩略图服务）。 */
-function OrgThumb({ pageNumber, rotation, aspect }: { pageNumber: number; rotation: number | undefined; aspect: number }) {
+function OrgThumb({ pageNumber, rotation, aspect }: { pageNumber: number; rotation: number; aspect: number }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLSpanElement | null>(null);
   const inFlightRef = useRef<RenderHandle | null>(null);
@@ -336,7 +336,9 @@ export function OrganizeGrid(props: OrganizeGridProps) {
             onDrop={(e) => handleDrop(src, e)}
           >
             <span className="org-thumb-frame" style={{ aspectRatio: String(1 / aspect) }}>
-              <OrgThumb pageNumber={src + 1} rotation={effective || undefined} aspect={aspect} />
+              {/* 合成角须整值传递：`|| undefined` 会让 0° 回退页面自身 /Rotate，
+                  带 /Rotate 的页旋回 0° 时缩略图不回正、与按 0° 计算的占位框不一致。 */}
+              <OrgThumb pageNumber={src + 1} rotation={effective} aspect={aspect} />
             </span>
             <span className="org-label">
               第 {pos + 1} 页

@@ -229,8 +229,11 @@ export function pruneOrphanBookmarks(pdf: PDFDocument, keptKeys: Set<string>): n
       setEntry(kept[i].dict, "Prev", i > 0 ? kept[i - 1].raw : undefined);
       setEntry(kept[i].dict, "Next", i < kept.length - 1 ? kept[i + 1].raw : undefined);
     }
-    setEntry(parent, "First", kept[0].raw);
-    setEntry(parent, "Last", kept[kept.length - 1].raw);
+    // 链上无保留条目（全部悬空且无提升的子书签）：摘掉 parent 的 First/Last，
+    // 与「保留节点无子时删 First/Last/Count」同语义；parent 自身去留（悬空摘除
+    // 或降为叶子）由上层按同一规则决定，outline 根则由下方 Count 处理兜底。
+    setEntry(parent, "First", kept.length > 0 ? kept[0].raw : undefined);
+    setEntry(parent, "Last", kept.length > 0 ? kept[kept.length - 1].raw : undefined);
     return kept;
   };
 
