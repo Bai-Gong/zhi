@@ -41,6 +41,46 @@
   color: var(--text-muted);
 }
 
+/* ===== 自绘窗口控制（decorations=false，顶栏兼任标题栏） ===== */
+.window-controls {
+  display: flex;
+  align-self: stretch;
+  /* 右侧抵消顶栏水平内边距，让悬停带贴到窗口右上角；左侧与主题控件留白并加分隔线 */
+  margin: 0 -16px 0 10px;
+  border-left: 1px solid var(--border);
+}
+
+.window-control-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  /* 窗口控制按钮不做手型，贴近系统标题栏习惯 */
+  cursor: default;
+}
+
+.window-control-btn:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.window-control-btn:active {
+  background: var(--border);
+}
+
+.window-control-close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+.window-control-close:active {
+  background: #c50f1f;
+  color: #fff;
+}
+
 /* ===== 右侧面板（占位）：展开态标题行 ===== */
 .shell-aside {
   display: flex;
