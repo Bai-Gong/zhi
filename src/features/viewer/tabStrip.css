@@ -1,0 +1,108 @@
+/* 文档标签条样式（M2-计划 D2 / T9）。独立成 tabStrip.css（而非并入 viewer.css）：
+   本任务授权清单只允许新增本文件。颜色全部走主题 CSS 变量，深色模式随
+   :root[data-theme="dark"] 覆盖自动成立（D8），不硬编码。 */
+
+/* ===== 标签条本体：底部边线与工具栏连成一体 ===== */
+.tab-strip {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+  min-height: 34px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+/* 溢出可滚动（T9）：只有标签列表滚，「+」固定右端不跟着滚出视野 */
+.tab-strip-items {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+/* ===== 单个标签：非激活下沉、激活与工具栏同底色 + 顶部强调线 ===== */
+.tab-strip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  max-width: 200px;
+  padding: 0 6px 0 12px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tab-strip-item:hover {
+  color: var(--text-primary);
+}
+
+.tab-strip-item.active {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+/* 装载失败的标签给出可辨识的错误态（failTab 后无文件名，文案兜底为「打开失败」） */
+.tab-strip-item.error .tab-strip-label {
+  color: var(--danger);
+}
+
+.tab-strip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 关闭按钮：悬停/激活/键盘聚焦时才显现，降低常态视觉噪声 */
+.tab-strip-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.tab-strip-item:hover .tab-strip-close,
+.tab-strip-item.active .tab-strip-close,
+.tab-strip-close:focus-visible {
+  opacity: 1;
+}
+
+.tab-strip-close:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+/* ===== 「+」新建标签（接打开文件对话框） ===== */
+.tab-strip-new {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.tab-strip-new:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}

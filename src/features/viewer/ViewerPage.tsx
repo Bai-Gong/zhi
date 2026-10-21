@@ -16,10 +16,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { useSearchParams } from "react-router-dom";
 import { openDocument } from "../../core/document/openDocument";
 import { capScaleForRaster } from "../../core/document/renderQueue";
-import { useDocumentStore, type PageSize } from "../../core/document/store";
+import { useDocumentStore, activeTabOf, type PageSize } from "../../core/document/store";
+import { useUiStore } from "../../shell/uiStore";
 import { clampScale, ZOOM_STEP } from "./pageGeometry";
 import { PageCanvas } from "./PageCanvas";
 import { registerFitWidthHandler } from "./scrollBridge";
+import { SearchHitLayer, SearchPanel, useSearchHitFocus } from "./searchPanel";
+import { TabStrip } from "./tabStrip";
 import { ViewerToolbar } from "./ViewerToolbar";
 import "./viewer.css";
 
@@ -27,18 +30,57 @@ import "./viewer.css";
 const VIEWER_PADDING = 24;
 /** 当前页判定容差：视口顶边以下该像素内仍视为上一页贴边。 */
 const CURRENT_PAGE_TOLERANCE = 4;
+/** 沉浸边缘唤出阈值（T7）：与 AppShell 同款（顶缘 8px 唤出、越过 140px 收起）。
+ *  两处各自持有一份常量是有意的——模块间不为共享一个小阈值增加耦合，改时同步。 */
+const IMMERSIVE_REVEAL_PX = 8;
+const IMMERSIVE_HIDE_PX = 140;
 
 export function ViewerPage() {
   const [params] = useSearchParams();
   const path = params.get("path");
 
-  const status = useDocumentStore((s) => s.status);
-  const error = useDocumentStore((s) => s.error);
-  const fileName = useDocumentStore((s) => s.fileName);
-  const currentPage = useDocumentStore((s) => s.currentPage);
-  const scale = useDocumentStore((s) => s.scale);
-  const pdfDocument = useDocumentStore((s) => s.document);
-  const storePageSizes = useDocumentStore((s) => s.pageSizes);
+  // 多标签 store（M2-计划 D1）：整个查看器只看「激活标签」的会话字段；
+  // activeTabOf 无标签时返回稳定哨兵（idle 空态），本组件免判空。
+  const tab = useDocumentStore(activeTabOf);
+  const status = tab.status;
+  const error = tab.error;
+  const fileName = tab.fileName;
+  const currentPage = tab.currentPage;
+  const scale = tab.scale;
+  const pdfDocument = tab.document;
+  const storePageSizes = tab.pageSizes;
+  const activeTabId = useDocumentStore((s) => s.activeTabId);
+  const openRejection = useDocumentStore((s) => s.openRejection);
+  const dismissOpenRejection = useDocumentStore((s) => s.dismissOpenRejection);
+
+  // 搜索面板（M2 T4）：开合是 uiStore 的会话级瞬态；命中聚焦经 searchPanel 模块内桥订阅。
+  const searchPanelOpen = useUiStore((s) => s.searchPanelOpen);
+  const hitFocus = useSearchHitFocus();
+
+  // 沉浸模式（M2 T7）：uiStore 会话级瞬态。shell 侧已隐藏顶栏/侧栏/右侧面板；
+  // 本页隐藏标签条与工具栏，鼠标移到窗口顶缘临时唤出（与 AppShell 同款阈值
+  // 联动，两侧独立判定、无共享状态）。
+  const immersive = useUiStore((s) => s.immersive);
+  // 画布反色（T7 / M2-计划 D8）：开关在工具栏，落点见下方 canvas-invert 同步效应。
+  const canvasInvert = useUiStore((s) => s.canvasInvert);
+  // 标签条（M2 T9）：无标签时不渲染（空态下孤零零一个「+」反而误导）。
+  const tabCount = useDocumentStore((s) => s.tabs.length);
+
+  // 沉浸边缘唤出：只在沉浸期间挂 mousemove 监听，退出即复位（不留瞬态残留）。
+  const [immersivePeek, setImmersivePeek] = useState(false);
+  useEffect(() => {
+    if (!immersive) {
+      setImmersivePeek(false);
+      return;
+    }
+    const onMove = (event: MouseEvent) => {
+      if (event.clientY <= IMMERSIVE_REVEAL_PX) setImmersivePeek(true);
+      else if (event.clientY > IMMERSIVE_HIDE_PX) setImmersivePeek(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, [immersive]);
+  const chromeVisible = !immersive || immersivePeek;
 
   useEffect(() => {
     if (path) void openDocument(path);
@@ -135,7 +177,7 @@ export function ViewerPage() {
     if (!pageSizes) return;
     setVisibleSet(new Set()); // IO 回调随后按实际相交重新填充
     recomputeOffsets();
-    const target = Math.min(Math.max(1, useDocumentStore.getState().currentPage), pageSizes.length);
+    const target = Math.min(Math.max(1, activeTabOf(useDocumentStore.getState()).currentPage), pageSizes.length);
     lastReportedRef.current = target;
     if (target > 1) scrollToPage(target);
     updateAnchor();
@@ -215,8 +257,8 @@ export function ViewerPage() {
             ? 100
             : 1;
       const steps = (-event.deltaY * unit) / 100;
-      const store = useDocumentStore.getState();
-      store.setScale(clampScale(store.scale * Math.pow(ZOOM_STEP, steps)));
+      const session = activeTabOf(useDocumentStore.getState());
+      useDocumentStore.getState().setScale(clampScale(session.scale * Math.pow(ZOOM_STEP, steps)));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -229,17 +271,17 @@ export function ViewerPage() {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       if (target && target.closest("input, textarea, [contenteditable='true']")) return;
-      const store = useDocumentStore.getState();
-      const max = Math.max(1, store.numPages);
+      const session = activeTabOf(useDocumentStore.getState());
+      const max = Math.max(1, session.numPages);
       let destination: number;
       switch (event.key) {
         case "ArrowDown":
         case "PageDown":
-          destination = Math.min(max, store.currentPage + 1);
+          destination = Math.min(max, session.currentPage + 1);
           break;
         case "ArrowUp":
         case "PageUp":
-          destination = Math.max(1, store.currentPage - 1);
+          destination = Math.max(1, session.currentPage - 1);
           break;
         case "Home":
           destination = 1;
@@ -251,7 +293,7 @@ export function ViewerPage() {
           return;
       }
       event.preventDefault();
-      store.setCurrentPage(destination);
+      useDocumentStore.getState().setCurrentPage(destination);
     };
     el.addEventListener("keydown", onKeyDown);
     return () => el.removeEventListener("keydown", onKeyDown);
@@ -267,6 +309,25 @@ export function ViewerPage() {
     return () => window.removeEventListener("resize", onResize);
   }, [recomputeOffsets, updateAnchor]);
 
+  // ===== 画布反色落点（T7 / D8）：按 uiStore.canvasInvert 把 theme.css 既有的
+  // .canvas-invert 类挂到每张页面画布上（该滤镜只反色画布，不碰文本层与高亮
+  // 覆盖层）。画布由 PageCanvas 随虚拟化挂卸，本组件用 MutationObserver 在容器
+  // 侧同步类名——PageCanvas.tsx 不在本任务授权文件清单内，这里是不动它的等价
+  // 落点；观察器随滚动舞台（key=activeTabId）重建，无泄漏。 =====
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return;
+    const sync = () => {
+      for (const el of root.querySelectorAll<HTMLElement>(".viewer-page-canvas")) {
+        el.classList.toggle("canvas-invert", canvasInvert);
+      }
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [canvasInvert, activeTabId, pageSizes]);
+
   // ===== 适应宽度：真实计算在持有容器与页宽的这一侧注册，工具栏经桥请求 =====
   const pageSizesRef = useRef<PageSize[] | null>(null);
   useEffect(() => {
@@ -278,7 +339,7 @@ export function ViewerPage() {
       const el = scrollRef.current;
       const sizes = pageSizesRef.current;
       if (!el || !sizes || sizes.length === 0) return;
-      const page = Math.min(Math.max(1, useDocumentStore.getState().currentPage), sizes.length);
+      const page = Math.min(Math.max(1, activeTabOf(useDocumentStore.getState()).currentPage), sizes.length);
       const base = sizes[page - 1];
       if (!base || base.width <= 0) return;
       const available = el.clientWidth - 2 * VIEWER_PADDING;
@@ -287,68 +348,105 @@ export function ViewerPage() {
     });
   }, [pageSizes]);
 
+  // ===== 搜索命中跳转（M2-1）：面板发布聚焦 → 滚动到命中矩形上方约 1/3 视口处 =====
+  // 命中矩形 top 是「页项内 CSS 偏移」（与页项 offsetTop 同基准），直接叠加即可；
+  // 缩放后的重发布也会走到这里，命中持续保持在视口内。
+  useEffect(() => {
+    if (!hitFocus) return;
+    const el = scrollRef.current;
+    const item = itemRefs.current[hitFocus.pageNumber - 1];
+    const target = hitFocus.hitRects[hitFocus.hitIndex]?.[0];
+    if (!el || !item || !target) return;
+    el.scrollTop = Math.max(0, item.offsetTop + target.top - el.clientHeight / 3);
+  }, [hitFocus]);
+
   // pdf.js 文本层/尺寸契约：--scale-factor 开在页栈上作默认值，
   // 各页项再按封顶后缩放逐页覆盖（百分比定位随之生效）。
   const pagesStyle = { "--scale-factor": String(scale), padding: VIEWER_PADDING } as CSSProperties;
 
   return (
     <div className="viewer-page">
-      <ViewerToolbar />
-      <div
-        ref={scrollRef}
-        className="viewer-scroll"
-        tabIndex={0}
-        aria-label={fileName ? `${fileName} 文档视图` : "文档视图"}
-        onScroll={handleScroll}
-        onMouseDown={handleMouseDown}
-      >
-        {status !== "ready" ? (
-          <div className="viewer-state">
-            {status === "idle" && (
-              <p className="viewer-empty">尚未打开文件——从首页「打开 PDF 文件」开始。</p>
-            )}
-            {status === "loading" && <p className="viewer-empty">正在装载文档…</p>}
-            {status === "error" && (
-              <div className="viewer-error" role="alert">
-                <p>打开失败：{error ?? "未知错误"}</p>
-                <p className="viewer-error-path">{path ?? fileName ?? ""}</p>
-              </div>
-            )}
-          </div>
-        ) : !pageSizes ? (
-          <div className="viewer-state">
-            <p className="viewer-empty">正在计算页面布局…</p>
-          </div>
-        ) : (
-          <div className="viewer-pages" style={pagesStyle}>
-            {pageSizes.map((size, index) => {
-              // 占位框与 core 队列落笔同源封顶（cssWidth = floor(viewport.cssScale)）；
-              // --scale-factor 按页给定，供文本层字体缩放使用（封顶后与 store.scale 不同）。
-              const cssScale = capScaleForRaster(size.width, size.height, scale);
-              return (
-                <div
-                  key={index}
-                  ref={(el) => {
-                    itemRefs.current[index] = el;
-                  }}
-                  className="viewer-page-item"
-                  data-page={index + 1}
-                  style={
-                    {
-                      width: Math.floor(size.width * cssScale),
-                      height: Math.floor(size.height * cssScale),
-                      "--scale-factor": String(cssScale),
-                    } as CSSProperties
-                  }
-                >
-                  {visibleSet.has(index) && pdfDocument ? (
-                    <PageCanvas pageNumber={index + 1} scale={scale} distance={Math.abs(index + 1 - currentPage)} />
-                  ) : null}
+      {/* 沉浸（T7）：标签条与工具栏一并隐藏，鼠标移到窗口顶缘临时唤出（与 AppShell
+          侧同款阈值联动）。「打开被拒」横幅是警报、搜索面板是阅读伴随工具——
+          不算界面骨架，沉浸下保持可见。 */}
+      {chromeVisible && tabCount > 0 && <TabStrip />}
+      {chromeVisible && <ViewerToolbar />}
+      {/* 打开被拒（标签达到上限等）：不侵入任何标签的会话状态，横幅提示即可 */}
+      {openRejection && (
+        <div className="viewer-rejection" role="alert">
+          <span className="viewer-rejection-text">{openRejection}</span>
+          <button type="button" className="viewer-rejection-dismiss" onClick={dismissOpenRejection}>
+            知道了
+          </button>
+        </div>
+      )}
+      {/* 主区横向行（M2-计划 D4）：滚动舞台 + 右侧可折叠搜索面板。
+          面板是 viewer 内部布局，不动 shell 的右侧面板占位（留给 M5）。 */}
+      <div className="viewer-main-row">
+        {/* key 绑定标签 id：切换标签时整个滚动舞台重挂载——滚动位置/虚拟化集合/
+            观察者全部按新标签重建（页码由下方布局恢复效应滚动到位），旧标签的
+            画布句柄随之卸载取消，杜绝两标签的画面串扰。 */}
+        <div
+          key={activeTabId ?? "no-tab"}
+          ref={scrollRef}
+          className="viewer-scroll"
+          tabIndex={0}
+          aria-label={fileName ? `${fileName} 文档视图` : "文档视图"}
+          onScroll={handleScroll}
+          onMouseDown={handleMouseDown}
+        >
+          {status !== "ready" ? (
+            <div className="viewer-state">
+              {status === "idle" && (
+                <p className="viewer-empty">尚未打开文件——从首页「打开 PDF 文件」开始。</p>
+              )}
+              {status === "loading" && <p className="viewer-empty">正在装载文档…</p>}
+              {status === "error" && (
+                <div className="viewer-error" role="alert">
+                  <p>打开失败：{error ?? "未知错误"}</p>
+                  <p className="viewer-error-path">{path ?? fileName ?? ""}</p>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+            </div>
+          ) : !pageSizes ? (
+            <div className="viewer-state">
+              <p className="viewer-empty">正在计算页面布局…</p>
+            </div>
+          ) : (
+            <div className="viewer-pages" style={pagesStyle}>
+              {pageSizes.map((size, index) => {
+                // 占位框与 core 队列落笔同源封顶（cssWidth = floor(viewport.cssScale)）；
+                // --scale-factor 按页给定，供文本层字体缩放使用（封顶后与 store.scale 不同）。
+                const cssScale = capScaleForRaster(size.width, size.height, scale);
+                return (
+                  <div
+                    key={index}
+                    ref={(el) => {
+                      itemRefs.current[index] = el;
+                    }}
+                    className="viewer-page-item"
+                    data-page={index + 1}
+                    style={
+                      {
+                        width: Math.floor(size.width * cssScale),
+                        height: Math.floor(size.height * cssScale),
+                        "--scale-factor": String(cssScale),
+                      } as CSSProperties
+                    }
+                  >
+                    {visibleSet.has(index) && pdfDocument ? (
+                      <PageCanvas pageNumber={index + 1} scale={scale} distance={Math.abs(index + 1 - currentPage)} />
+                    ) : null}
+                    {/* 搜索命中覆盖层（T4）：自己的层渲染命中矩形，不碰 PageCanvas；
+                        只挂在有聚焦命中的那一页，矩形随缩放由面板重算发布。 */}
+                    {hitFocus && hitFocus.pageNumber === index + 1 ? <SearchHitLayer focus={hitFocus} /> : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {searchPanelOpen && <SearchPanel />}
       </div>
     </div>
   );

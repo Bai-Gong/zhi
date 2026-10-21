@@ -1,7 +1,7 @@
 import type { PDFPageProxy } from "pdfjs-dist";
 import { pdfjsLib } from "./pdfjs";
 import { capScaleForRaster } from "./renderQueue";
-import { useDocumentStore } from "./store";
+import { useDocumentStore, activeTabOf } from "./store";
 
 /**
  * 文本层渲染封装（技术方案 5.2 第 8 条）：与画布使用同一 viewport 语义构建，
@@ -25,12 +25,13 @@ export function renderTextLayer(params: {
   cssScale: number;
 }): TextLayerHandle {
   const { pageNumber, container, cssScale } = params;
-  const generation = useDocumentStore.getState().loadGeneration;
+  // 代际与文档都取自「激活标签」：换标签或本标签重开后，本轮文本层作废。
+  const generation = activeTabOf(useDocumentStore.getState()).loadGeneration;
   let cancelled = false;
   let active: { cancel(): void } | null = null;
 
   const done = (async (): Promise<"painted" | "cancelled"> => {
-    const { document } = useDocumentStore.getState();
+    const { document } = activeTabOf(useDocumentStore.getState());
     if (!document) throw new Error("尚未打开文档，无法渲染文本层");
     let page: PDFPageProxy;
     try {
@@ -39,7 +40,7 @@ export function renderTextLayer(params: {
       if (cancelled) return "cancelled";
       throw error;
     }
-    if (cancelled || generation !== useDocumentStore.getState().loadGeneration) return "cancelled";
+    if (cancelled || generation !== activeTabOf(useDocumentStore.getState()).loadGeneration) return "cancelled";
 
     container.replaceChildren();
     const base = page.getViewport({ scale: 1 });

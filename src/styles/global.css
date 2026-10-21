@@ -11,6 +11,8 @@
   --accent: #b45309;
   --accent-soft: #fef3e2;
   --danger: #b91c1c;
+  /* accent 上的文字/图标色：浅色 accent 深，用白字（深色主题会覆盖为深字，见 shell/theme.css） */
+  --text-on-accent: #ffffff;
   --radius-sm: 4px;
   --radius-md: 8px;
   --top-bar-height: 48px;
@@ -75,7 +77,7 @@ button {
   height: 26px;
   border-radius: var(--radius-sm);
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
   font-size: 14px;
 }
 
@@ -163,7 +165,7 @@ button {
   border: none;
   border-radius: var(--radius-md);
   background: var(--accent);
-  color: #fff;
+  color: var(--text-on-accent);
   font-size: 15px;
   cursor: pointer;
 }
