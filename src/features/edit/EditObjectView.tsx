@@ -2,8 +2,11 @@
 // - 文本对象：白底遮盖矩形 + 浏览器字体实时预览新文本（所见即所得）；
 // - 图片对象：objectUrl 预览 + 八手柄（四角等比、四边单轴，验收 M5-2）；
 // - 拖拽移动 / 手柄缩放走 core editStore 的 beginStep → liveUpdate → endStep
-//   三段式（一次拖动 = 一步撤销单元）；指针几何在**页内 CSS 空间**采集，
-//   经 editModel 的同源换算落到用户空间（含旋转页的 y 翻转）。
+//   三段式（一次拖动 = 一步撤销单元）。pointerdown 时先 endStep 提交进行中的
+//   文本编辑步（属性面板输入框聚焦时直接拖拽 = 文本编辑与拖拽两步独立入栈），
+//   beginStep 延迟到首帧 pointermove（避开紧随 pointerdown 的输入框 blur）；
+//   指针几何在**页内 CSS 空间**采集，经 editModel 的同源换算落到用户空间
+//   （含旋转页的 y 翻转）。
 //
 // 本模块零 pdfjs-dist / pdf-lib import（技术方案 4.3 规则 1）。
 import { useRef, type PointerEvent as ReactPointerEvent } from "react";
@@ -54,15 +57,17 @@ export function EditObjectView({
   const imageUrl = useEditStore((s) =>
     object.kind === "image" ? s.sessions[tabId]?.images[object.srcId]?.objectUrl : undefined,
   );
-  // 拖拽会话（移动）：起点用户空间点 + 对象起始位置。
-  const moveRef = useRef<{ userX: number; userY: number; coverX: number; coverY: number } | null>(null);
-  // 缩放会话：起始 CSS 矩形 + 指针起点 + 等比（仅角手柄）。
+  // 拖拽会话（移动）：起点用户空间点 + 对象起始位置；stepped = 首帧 pointermove
+  // 是否已 beginStep（点击不拖动不开步骤）。
+  const moveRef = useRef<{ userX: number; userY: number; coverX: number; coverY: number; stepped: boolean } | null>(null);
+  // 缩放会话：起始 CSS 矩形 + 指针起点 + 等比（仅角手柄）；stepped 同上。
   const resizeRef = useRef<{
     handle: Handle;
     startCss: { left: number; top: number; width: number; height: number };
     startX: number;
     startY: number;
     proportional: boolean;
+    stepped: boolean;
   } | null>(null);
 
   if (!transform) return null;
@@ -97,14 +102,23 @@ export function EditObjectView({
       object.kind === "text"
         ? { coverX: object.cover.x, coverY: object.cover.y }
         : { coverX: object.x, coverY: object.y };
-    moveRef.current = { userX: user[0], userY: user[1], coverX: base.coverX, coverY: base.coverY };
-    store().beginStep(tabId);
+    // 焦点可能在属性面板输入框（其 onFocus 已 beginStep）：先提交该进行中的
+    // 文本编辑步（有改动独立成一步，无改动干净丢弃），拖拽才有自己的撤销步。
+    store().endStep(tabId);
+    // beginStep 不在此处而延迟到首帧 pointermove：pointerdown 后紧随的 mousedown
+    // 默认行为触发输入框 blur（onBlur 的 endStep），此刻拖拽尚无任何变化，会把这个
+    // 刚开的步骤当「无变化」丢弃——首帧 move 时 blur 已发生完，才能干净开步。
+    moveRef.current = { userX: user[0], userY: user[1], coverX: base.coverX, coverY: base.coverY, stepped: false };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const onMovePointerMove = (event: ReactPointerEvent) => {
     const delta = userDeltaOf(event);
     if (!delta) return;
     const session = moveRef.current!;
+    if (!session.stepped) {
+      store().beginStep(tabId);
+      session.stepped = true;
+    }
     store().liveUpdate(tabId, (objects) =>
       objects.map((o) => {
         if (o.id !== object.id) return o;
@@ -128,14 +142,17 @@ export function EditObjectView({
     onSelect(object.id);
     if (object.kind !== "image") return;
     const css = userRectToCssRect(object, transform, cssScale);
+    // 同 startMove：先提交进行中的文本编辑步；beginStep 延迟到首帧 pointermove
+    // （避开 pointerdown 后紧随的输入框 blur 竞争）。
+    store().endStep(tabId);
     resizeRef.current = {
       handle,
       startCss: { left: css.left, top: css.top, width: css.width, height: css.height },
       startX: event.clientX,
       startY: event.clientY,
       proportional: handle.length === 2,
+      stepped: false,
     };
-    store().beginStep(tabId);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
   const onResizePointerMove = (event: ReactPointerEvent) => {
@@ -172,6 +189,10 @@ export function EditObjectView({
     }
     const userRect = cssRectToUserRect(next, transform, cssScale);
     if (!userRect) return;
+    if (!session.stepped) {
+      store().beginStep(tabId);
+      session.stepped = true;
+    }
     store().liveUpdate(tabId, (objects) =>
       objects.map((o) => (o.id === object.id && o.kind === "image" ? { ...o, ...userRect } : o)),
     );

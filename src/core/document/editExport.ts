@@ -12,6 +12,8 @@ import { editFontSpec, isVectorText, TEXT_LINE_HEIGHT, type EditImageAsset, type
  * **新文件**；原文件字节绝不改动（目标与原路径相同时直接拒绝写入）。
  *
  * 文本落笔的诚实双轨（依赖冻结下的定位，见 editModel.isVectorText）：
+ * 两轨一律以遮盖矩形为界裁切（所见即所得，与预览 overflow:hidden 同口径）：
+ * 矢量按字体度量截断超宽字符与超高行，位图在 canvas clip 矩形内绘制。
  * - **矢量文本**：内容全部可 WinAnsi 编码（西文/数字/常用符号）→ pdf-lib 标准
  *   字体（Helvetica/Times/Courier 四变体），导出后在 Acrobat 中**可再选中复制**；
  * - **位图文本**：含中文等不可编码字符 → 离屏 canvas 按屏幕同款排版渲染成
@@ -74,6 +76,8 @@ function parseHexColor(hex: string): { r: number; g: number; b: number } {
 /**
  * 位图文本渲染：按对象排版在离屏 canvas 画出全部行，返回 PNG 字节。
  * 白底（与遮盖矩形一致，避免透明底在深色阅读器主题下露底色）。
+ * 以遮盖矩形为界裁切（与预览 overflow:hidden 同口径）：画布即矩形本身，
+ * clip 区域内绘制且不传 maxWidth——超宽行被裁掉而非整行横向压缩变窄。
  */
 async function renderTextBitmap(object: TextEditObject): Promise<Uint8Array> {
   const scale = BITMAP_SCALE;
@@ -90,19 +94,40 @@ async function renderTextBitmap(object: TextEditObject): Promise<Uint8Array> {
   ctx.font = `${object.italic ? "italic " : ""}${object.bold ? "700" : "400"} ${object.fontSize * scale}px ${family}`;
   ctx.fillStyle = object.color;
   ctx.textBaseline = "alphabetic";
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, width, height);
+  ctx.clip();
   const lines = object.text.split("\n");
   const baseline0 = object.fontSize * FIRST_LINE_ASCENT * scale;
   const lineHeight = object.fontSize * TEXT_LINE_HEIGHT * scale;
   lines.forEach((line, i) => {
-    ctx.fillText(line, 0, baseline0 + i * lineHeight, width);
+    ctx.fillText(line, 0, baseline0 + i * lineHeight); // 空串行无字形，天然安全
   });
+  ctx.restore();
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("位图文本导出失败。");
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-/** 导出前提：激活标签就绪 + 编辑会话有效且未过期。 */
-function requireExportContext():
+/**
+ * 按字体度量把一行截断到遮盖矩形宽度内（矢量轨道）：逐码点累积、前缀整串
+ * 测量（for...of 天然覆盖中文等多码点边界情形），返回可完整落笔的前缀；
+ * 首个字符即超宽时返回空串（整行不落笔）。空串行直接返回空串。
+ */
+function clipLineToWidth(line: string, font: PDFFont, size: number, maxWidth: number): string {
+  if (maxWidth <= 0 || line.length === 0) return "";
+  if (font.widthOfTextAtSize(line, size) <= maxWidth) return line;
+  let fit = "";
+  for (const ch of line) {
+    const next = fit + ch;
+    if (font.widthOfTextAtSize(next, size) > maxWidth) break;
+    fit = next;
+  }
+  return fit;
+}
+
+/** 导出前提：激活标签就绪 + 编辑会话有效且未过期。 */function requireExportContext():
   | {
       ok: true;
       sourcePath: string;
@@ -201,6 +226,8 @@ export async function saveEditedCopy(): Promise<EditSaveResult> {
           if (object.text.trim().length === 0) continue; // 纯删除（只遮盖不重写）
           if (isVectorText(object.text)) {
             // 2a) 矢量文本：标准字体逐行落笔，基线自遮盖矩形顶下行。
+            //     以遮盖矩形为界裁切（与预览 overflow:hidden 同口径）：基线已
+            //     沉出矩形底的行（行数超出）不落笔；行内超出矩形宽度的字符截断。
             const font = await embedStdFont(object.fontFamily, object.bold, object.italic);
             const color = parseHexColor(object.color);
             const baseline0 = object.cover.y + object.cover.height - object.fontSize * FIRST_LINE_ASCENT;
@@ -208,9 +235,13 @@ export async function saveEditedCopy(): Promise<EditSaveResult> {
             const lines = object.text.split("\n");
             lines.forEach((line, i) => {
               if (line.length === 0) return;
-              page.drawText(line, {
+              const baseline = baseline0 - i * lineHeight;
+              if (baseline < object.cover.y) return; // 基线沉出矩形底 = 整行超出高度
+              const fit = clipLineToWidth(line, font, object.fontSize, object.cover.width);
+              if (fit.length === 0) return;
+              page.drawText(fit, {
                 x: object.cover.x,
-                y: baseline0 - i * lineHeight,
+                y: baseline,
                 size: object.fontSize,
                 font,
                 color: rgb(color.r, color.g, color.b),

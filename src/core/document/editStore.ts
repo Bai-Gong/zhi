@@ -13,7 +13,8 @@ import { makeEditObjectId, type EditImageAsset, type EditObject } from "./editMo
  * 撤销/重做（验收 M5-4，≥20 步）：全量快照双栈（UNDO_LIMIT=50），只快照
  * **对象数组**（结构化纯数据），图片字节经 srcId 引用不随快照拷贝。
  * 一步的语义由调用方用 beginStep/liveUpdate/endStep（拖拽等连续交互）或
- * step（离散修改）表达；redo 栈随任何新步骤清空。
+ * step（离散修改）表达；redo 栈随任何新修改清空（step/endStep 提交时与
+ * liveUpdate 首帧三处同口径）。
  *
  * 选中集合是纯 UI 瞬态，留在编辑视图组件内，不入 store（与 organize 同例）。
  */
@@ -49,7 +50,7 @@ interface EditStoreState {
   step: (tabId: string, mutator: (objects: EditObject[]) => EditObject[]) => void;
   /** 连续交互三段式：beginStep 记起点快照（已有进行中步骤则保持首个）， */
   beginStep: (tabId: string) => void;
-  /** liveUpdate 只改当前状态不进栈（拖拽/输入的每一帧）， */
+  /** liveUpdate 只改当前状态不进栈（拖拽/输入的每一帧），但 redo 栈随首帧清空。 */
   liveUpdate: (tabId: string, mutator: (objects: EditObject[]) => EditObject[]) => void;
   /** endStep 提交：状态确实变化才把起点快照入栈；未变则丢弃。 */
   endStep: (tabId: string) => boolean;
@@ -130,7 +131,9 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
     const session = get().sessions[tabId];
     if (!session) return;
     set((s) => ({
-      sessions: { ...s.sessions, [tabId]: { ...session, objects: mutator(cloneObjects(session.objects)) } },
+      // redo 随任何新修改失效（与 step/endStep 同口径）：拖拽/输入的第一帧就清，
+      // 不等 endStep——若交互中途被打断（未走到 endStep），redo 也不复活旧分支。
+      sessions: { ...s.sessions, [tabId]: { ...session, objects: mutator(cloneObjects(session.objects)), redoStack: [] } },
     }));
   },
 
