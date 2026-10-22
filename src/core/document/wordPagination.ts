@@ -17,24 +17,30 @@ import { planBoundaries, TAIL_EPSILON_PX, type AtomicBox } from "./convertLayout
  *    把切点上移到该盒顶（吸附到行首）；比 MIN_SLICE 还矮说明有整页高的
  *    大盒（大图/长表），退化为硬切（内容仍连续保留在相邻页）；
  * 4. 逐页 html2canvas 以 {x, y, width, height} 窗口截取容器对应区段，
- *    2 倍光栅保证清晰度，pdf-lib 逐页嵌入成 A4/Letter。
+ *    2 倍光栅保证清晰度，pdf-lib 按文档自带页面几何逐页嵌入。
  *
  * 模块边界：html2canvas-pro / pdf-lib 只在 src/core/document；
  * 本文件不入桶导出，消费方直接 from。
  */
 
-/** 支持的纸型（pt）。 */
-export type WordPdfPaper = "a4" | "letter";
-
-export function wordPdfPaperSize(paper: WordPdfPaper): { width: number; height: number } {
-  return paper === "a4" ? { width: 595.28, height: 841.89 } : { width: 612, height: 792 };
+/**
+ * 页面几何：全部取自 .docx 自带的页面设置（docxPageSetup 解析；解析失败由
+ * 调用方兜底），Word→PDF 不再让用户选纸型/边距——「设置一致」即此意。
+ */
+export interface WordPageGeometry {
+  /** 页宽/页高（pt）。 */
+  widthPt: number;
+  heightPt: number;
+  /** 四边距（pt）。 */
+  marginTopPt: number;
+  marginRightPt: number;
+  marginBottomPt: number;
+  marginLeftPt: number;
 }
 
 /** Word→PDF 分页选项。 */
 export interface WordToPdfOptions {
-  paper: WordPdfPaper;
-  /** 四边距（pt）。 */
-  marginPt: number;
+  geometry: WordPageGeometry;
 }
 
 /** 分页产出的度量信息（结果页展示用）。 */
@@ -137,10 +143,9 @@ export async function paginateWordHtml(
   control: ConvertControl,
   ignoredCount: number,
 ): Promise<{ bytes: Uint8Array } & WordToPdfMeasure> {
-  const paper = wordPdfPaperSize(options.paper);
-  const margin = Math.max(0, options.marginPt);
-  const contentW = Math.max(120, paper.width - margin * 2);
-  const contentH = Math.max(120, paper.height - margin * 2);
+  const g = options.geometry;
+  const contentW = Math.max(120, g.widthPt - g.marginLeftPt - g.marginRightPt);
+  const contentH = Math.max(120, g.heightPt - g.marginTopPt - g.marginBottomPt);
 
   const host = document.createElement("div");
   host.className = HOST_CLASS;
@@ -191,11 +196,11 @@ export async function paginateWordHtml(
         );
       });
       const png = await pdf.embedPng(new Uint8Array(await blob.arrayBuffer()));
-      const page = pdf.addPage([paper.width, paper.height]);
+      const page = pdf.addPage([g.widthPt, g.heightPt]);
       // 内容顶对齐到页面上边距：视觉上等价 Word 的页边距分页。
       page.drawImage(png, {
-        x: margin,
-        y: paper.height - margin - slice.height,
+        x: g.marginLeftPt,
+        y: g.heightPt - g.marginTopPt - slice.height,
         width: contentW,
         height: slice.height,
       });

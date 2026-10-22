@@ -10,7 +10,8 @@ import {
 } from "./convertCommon";
 import { buildLines, groupParagraphs, isRawTextItem, readingMatrixOf, type TextLine } from "./convertLayout";
 import { pdfjsLib } from "./pdfjs";
-import { paginateWordHtml, type WordPdfPaper } from "./wordPagination";
+import { FALLBACK_DOCX_PAGE_SETUP, parseDocxPageSetup, type DocxPageSetup } from "./docxPageSetup";
+import { paginateWordHtml, type WordPageGeometry } from "./wordPagination";
 
 /**
  * PDF ⇄ Word 转换层（M6，模块 5；里程碑 M6-3/M6-4）：
@@ -149,11 +150,11 @@ export async function saveConvertedDocx(
 
 // ===== Word → PDF =====
 
-/** 向导文件步的 Word 元信息（.docx 无固定页数概念，numPages 占位 1，页数由转换分页决定）。 */
+/** 向导文件步的 Word 元信息（.docx 无固定页数概念，numPages 置 0＝框架展示「页数由转换分页决定」）。 */
 export interface DocxFileSummary {
   path: string;
   fileName: string;
-  numPages: 1;
+  numPages: 0;
 }
 
 /**
@@ -170,7 +171,7 @@ export async function inspectDocxFile(path: string): Promise<DocxFileSummary> {
   if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
     throw new Error("不是有效的 Word 文档（.docx）：旧版 .doc 格式不支持，请在 Word 中另存为 .docx。");
   }
-  return { path, fileName: path.split(/[\\/]/).pop() || path, numPages: 1 };
+  return { path, fileName: path.split(/[\\/]/).pop() || path, numPages: 0 };
 }
 
 /** Word→PDF 执行结果。 */
@@ -179,12 +180,17 @@ export interface WordToPdfResult {
   pageCount: number;
   /** mammoth 报告的不支持内容条数（>0 时结果页提示「部分复杂版式已降级」）。 */
   ignoredCount: number;
+  /** 实际采用的页面设置与来源（结果页展示「设置一致」的依据）。 */
+  pageSetup: { geometry: WordPageGeometry; fromDocument: boolean };
 }
 
-/** Word→PDF 执行（验收 M6-4）：mammoth → 分页 DOM → 截图 → pdf-lib 成册。 */
+/**
+ * Word→PDF 执行（验收 M6-4）：mammoth → 分页 DOM → 截图 → pdf-lib 成册。
+ * 无配置：纸张与四边距直接采用 .docx 自带的页面设置（docxPageSetup），
+ * 解析不到（异常 ZIP/缺 sectPr）才兜底 A4 常规边距——「设置一致」不靠用户选。
+ */
 export async function runWordToPdf(
   file: { path: string; fileName: string },
-  options: { paper: WordPdfPaper; marginPt: number },
   control: ConvertControl,
 ): Promise<WordToPdfResult> {
   control.onStage("正在读取并解析 Word 文档…", null);
@@ -194,6 +200,17 @@ export async function runWordToPdf(
   } catch (error) {
     throw new Error(`读取「${file.fileName}」失败：${describeError(error)}`);
   }
+  // 页面设置与 mammoth 共用同一份字节（两者都只读，互不影响）。
+  const setup: DocxPageSetup | null = await parseDocxPageSetup(bytes);
+  const base = setup ?? FALLBACK_DOCX_PAGE_SETUP;
+  const geometry: WordPageGeometry = {
+    widthPt: base.widthPt,
+    heightPt: base.heightPt,
+    marginTopPt: base.topPt,
+    marginRightPt: base.rightPt,
+    marginBottomPt: base.bottomPt,
+    marginLeftPt: base.leftPt,
+  };
   // mammoth 需要 ArrayBuffer；bytes.slice() 复制一份（原视图可能被复用）。
   let html: string;
   let ignoredCount = 0;
@@ -210,6 +227,11 @@ export async function runWordToPdf(
   if (html.replace(/<[^>]+>/g, "").trim().length === 0 && !html.includes("<img")) {
     throw new Error("该 Word 文档没有可转换的内容。");
   }
-  const { bytes: pdfBytes, pageCount } = await paginateWordHtml(html, options, control, ignoredCount);
-  return { bytes: pdfBytes, pageCount, ignoredCount };
+  const { bytes: pdfBytes, pageCount } = await paginateWordHtml(
+    html,
+    { geometry },
+    control,
+    ignoredCount,
+  );
+  return { bytes: pdfBytes, pageCount, ignoredCount, pageSetup: { geometry, fromDocument: setup !== null } };
 }

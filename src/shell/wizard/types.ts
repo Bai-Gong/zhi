@@ -102,7 +102,11 @@ export interface WizardToolDefinition<TConfig, TFileInfo extends WizardFileBase>
      */
     inspect: (path: string) => Promise<TFileInfo>;
   };
-  config: {
+  /**
+   * 配置步（可选）。缺省 = 无配置工具：向导只有「选文件 → 执行 → 导出」三步，
+   * 选完文件直接执行（如 Word→PDF——纸张/边距全部取自文档自身，不靠用户选）。
+   */
+  config?: {
     /** 向导挂载时的初始配置。 */
     initial: () => TConfig;
     /** 配置面板（受控组件：文件元信息只读流入，配置改动经 onChange 流出）。 */
@@ -111,9 +115,10 @@ export interface WizardToolDefinition<TConfig, TFileInfo extends WizardFileBase>
     validate?: (files: readonly TFileInfo[], config: TConfig) => string | null;
   };
   /**
-   * 执行（配置步「开始执行」触发一次）：产出内存结果与落盘函数。
-   * 实现约定：轮询 cancelToken，在安全点抛 {@link WizardCancelled}；
+   * 执行（配置步「开始执行」或无配置工具的「开始执行」触发一次）：产出内存结果
+   * 与落盘函数。实现约定：轮询 cancelToken，在安全点抛 {@link WizardCancelled}；
    * 阶段性调用 onProgress；失败直接抛错（中文 message，框架呈现并保留配置）。
+   * 无配置工具的 config 为 undefined（TConfig 记为 void/undefined 即可）。
    */
   run: (input: {
     files: readonly TFileInfo[];

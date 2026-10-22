@@ -37,14 +37,20 @@ import "./wizard.css";
  * - 导出落盘由工具的 output.save() 完成（对话框/写盘策略归工具，框架只呈现结局）。
  */
 
-/** 四个步骤的中文标题（步骤指示条顺序即流程顺序）。 */
-const STEP_TITLES = ["选择文件", "配置", "执行", "导出"] as const;
-type WizardStep = (typeof STEP_TITLES)[number];
-const STEP_OF: Record<WizardStep, number> = {
+/** 有/无配置工具的步骤标题（无配置：选文件 → 执行 → 导出，选完直接执行）。 */
+const STEP_TITLES_WITH_CONFIG = ["选择文件", "配置", "执行", "导出"] as const;
+const STEP_TITLES_NO_CONFIG = ["选择文件", "执行", "导出"] as const;
+type WizardStep = (typeof STEP_TITLES_WITH_CONFIG)[number];
+const STEP_OF_WITH_CONFIG: Record<WizardStep, number> = {
   选择文件: 0,
   配置: 1,
   执行: 2,
   导出: 3,
+};
+const STEP_OF_NO_CONFIG: Record<Exclude<WizardStep, "配置">, number> = {
+  选择文件: 0,
+  执行: 1,
+  导出: 2,
 };
 
 /** 文件步的条目状态（解析在框架内驱动，结果缓存到条目上）。 */
@@ -66,12 +72,17 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
   tool: WizardToolDefinition<TConfig, TFileInfo>;
 }) {
   const navigate = useNavigate();
+  const hasConfig = tool.config !== undefined;
+  const stepTitles = hasConfig ? STEP_TITLES_WITH_CONFIG : STEP_TITLES_NO_CONFIG;
 
   // ===== 文件步状态（解析结果随条目缓存；排序即数组顺序） =====
   const [step, setStep] = useState<WizardStep>("选择文件");
   const [fileEntries, setFileEntries] = useState<FileEntry<TFileInfo>[]>([]);
   // 配置状态归框架持有：回退/失败/取消一律不清空（验收「保留已选配置」）。
-  const [config, setConfig] = useState<TConfig>(() => tool.config.initial());
+  // 无配置工具 TConfig 恒为 undefined（initial 缺省），run 拿到同样的 undefined。
+  const [config, setConfig] = useState<TConfig>(() =>
+    tool.config ? tool.config.initial() : (undefined as TConfig),
+  );
   const [configError, setConfigError] = useState<string | null>(null);
 
   // ===== 执行步状态 =====
@@ -89,6 +100,8 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
   const filesBusy = fileEntries.some((entry) => entry.status === "loading");
   const filesBroken = fileEntries.some((entry) => entry.status === "error");
   const canLeaveFiles = !filesBusy && !filesBroken && fileEntries.length >= tool.files.minCount;
+  // 选择按钮的文件类型称谓按工具过滤器取（PDF 工具缺省 filters 时兜底「PDF」）
+  const fileKindLabel = tool.files.filters?.[0]?.name ?? "PDF";
 
   // ===== 文件步：添加（plugin-dialog，多选按工具定义）/ 移除 / 排序 =====
   const addFiles = useCallback(async () => {
@@ -158,9 +171,18 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
     setStep("配置");
   }, []);
 
+  /** 无配置工具的回退目标 = 文件步（有配置仍回配置步）。 */
+  const goBackFromRunOrExport = useCallback(() => {
+    if (hasConfig) {
+      goConfig();
+      return;
+    }
+    goFiles();
+  }, [hasConfig, goConfig, goFiles]);
+
   /** 执行：进入执行步即开始（验收「执行进度可见」），完成自动进导出步。 */
   const startRun = useCallback(async () => {
-    const problem = tool.config.validate?.(readyFiles, config) ?? null;
+    const problem = tool.config?.validate?.(readyFiles, config) ?? null;
     if (problem) {
       setConfigError(problem);
       return;
@@ -195,6 +217,16 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
     // readyFiles/config 闭包快照足够（run 一次一份；重跑走本函数重新取值）。
   }, [tool, readyFiles, config]);
 
+  /** 文件步「下一步」：有配置进配置步，无配置直接开跑（工具无任何可调项）。
+   * 定义在 startRun 之后：useCallback 的 deps 数组渲染期求值，先引会 TDZ。 */
+  const goNextFromFiles = useCallback(() => {
+    if (hasConfig) {
+      goConfig();
+      return;
+    }
+    void startRun();
+  }, [hasConfig, goConfig, startRun]);
+
   const cancelRun = useCallback(() => {
     cancelRef.current.cancelled = true;
     setProgress((prev) => ({ ...prev, message: "正在取消…" }));
@@ -215,7 +247,7 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
     }
   }, []);
 
-  const stepIndex = STEP_OF[step];
+  const stepIndex = hasConfig ? STEP_OF_WITH_CONFIG[step] : STEP_OF_NO_CONFIG[step as Exclude<WizardStep, "配置">];
 
   return (
     <div className="wizard-page">
@@ -229,7 +261,7 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
       </header>
 
       <ol className="wizard-steps" aria-label="向导步骤">
-        {STEP_TITLES.map((title, index) => (
+        {stepTitles.map((title, index) => (
           <li
             key={title}
             className={index === stepIndex ? "wizard-step current" : index < stepIndex ? "wizard-step done" : "wizard-step"}
@@ -249,8 +281,8 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
                 <FilePlus2 size={15} aria-hidden />
                 {fileEntries.length === 0
                   ? tool.files.multiple
-                    ? "添加 PDF 文件"
-                    : "选择 PDF 文件"
+                    ? `添加 ${fileKindLabel}文件`
+                    : `选择 ${fileKindLabel}文件`
                   : tool.files.multiple
                     ? "继续添加"
                     : "重新选择"}
@@ -277,7 +309,9 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
                           <Loader2 className="wizard-spin" size={13} aria-hidden /> 正在解析…
                         </>
                       )}
-                      {entry.status === "ready" && entry.info && `共 ${entry.info.numPages} 页`}
+                      {entry.status === "ready" &&
+                        entry.info &&
+                        (entry.info.numPages > 0 ? `共 ${entry.info.numPages} 页` : "页数由转换分页决定")}
                       {entry.status === "error" && (
                         <>
                           <TriangleAlert size={13} aria-hidden /> {entry.error}
@@ -331,14 +365,14 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
                     ? "已选 1 个文件"
                     : ""}
               </span>
-              <button type="button" className="wizard-button primary" disabled={!canLeaveFiles} onClick={goConfig}>
-                下一步：配置
+              <button type="button" className="wizard-button primary" disabled={!canLeaveFiles} onClick={goNextFromFiles}>
+                {hasConfig ? "下一步：配置" : "开始执行"}
               </button>
             </footer>
           </section>
         )}
 
-        {step === "配置" && (
+        {step === "配置" && hasConfig && tool.config && (
           <section className="wizard-card" aria-label="配置">
             <tool.config.panel files={readyFiles} config={config} onChange={setConfig} />
             {configError && (
@@ -385,8 +419,8 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
                 </p>
                 <p className="wizard-hint">已选文件与配置均已保留，可返回调整后重试。</p>
                 <div className="wizard-run-actions">
-                  <button type="button" className="wizard-button primary" onClick={goConfig}>
-                    返回配置
+                  <button type="button" className="wizard-button primary" onClick={goBackFromRunOrExport}>
+                    {hasConfig ? "返回配置" : "返回文件"}
                   </button>
                 </div>
               </div>
@@ -396,8 +430,8 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
                 <p className="wizard-run-message">已取消。</p>
                 <p className="wizard-hint">已选文件与配置均已保留。</p>
                 <div className="wizard-run-actions">
-                  <button type="button" className="wizard-button primary" onClick={goConfig}>
-                    返回配置
+                  <button type="button" className="wizard-button primary" onClick={goBackFromRunOrExport}>
+                    {hasConfig ? "返回配置" : "返回文件"}
                   </button>
                 </div>
               </div>
@@ -453,8 +487,8 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
               return body;
             })()}
             <footer className="wizard-card-footer">
-              <button type="button" className="wizard-button" onClick={goConfig}>
-                返回配置
+              <button type="button" className="wizard-button" onClick={goBackFromRunOrExport}>
+                {hasConfig ? "返回配置" : "返回文件"}
               </button>
               {saveState === "done" ? (
                 <button type="button" className="wizard-button primary" onClick={() => navigate(ROUTES.home)}>

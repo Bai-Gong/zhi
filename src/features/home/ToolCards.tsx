@@ -111,7 +111,7 @@ const TOOLS: ToolCard[] = [
   {
     id: "word-to-pdf",
     title: "Word 转 PDF",
-    description: ".docx 转 PDF，基础版式：标题/正文/图片/表格",
+    description: ".docx 转 PDF，无需配置：按文档自身页面设置",
     icon: FileDown,
     available: true,
     toolId: "word-to-pdf",
