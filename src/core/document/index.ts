@@ -16,7 +16,11 @@ export type {
   HighlightRect,
 } from "./store";
 
-export { openDocument, closeDocument, pickPdfFile, getPage } from "./openDocument";
+export { openDocument, closeDocument, pickPdfFile, pickPdfFiles, openDocumentsBatch, getPage } from "./openDocument";
+export type { BatchRestoreHint } from "./openDocument";
+
+export { loadLastSession, clearLastSession } from "./sessionRestore";
+export type { SessionSnapshot, SessionTabSnapshot } from "./sessionRestore";
 
 export { loadRecentFiles, addRecentFile, removeRecentFile } from "./recentFiles";
 export type { RecentFile } from "./recentFiles";

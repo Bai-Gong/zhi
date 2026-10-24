@@ -106,3 +106,109 @@
   background: var(--bg-subtle);
   color: var(--text-primary);
 }
+
+/* ===== 拖拽重排（多标签增强 T3） ===== */
+/* 拖动中的源标签半透明，明确「正在移动的是它」 */
+.tab-strip-item.dragging {
+  opacity: 0.45;
+}
+
+/* 插入指示线：data-drop 由 dragover 按指针相对条目中线写入（before=画在左侧，
+   after=末条目右侧）；用内阴影画 2px 竖线，与激活态的顶部强调线同源变量 */
+.tab-strip-item[data-drop="before"] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.tab-strip-item[data-drop="after"] {
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+
+/* 激活标签同时带插入指示时，保留顶部强调线（两道阴影叠加） */
+.tab-strip-item.active[data-drop="before"] {
+  box-shadow: inset 0 2px 0 var(--accent), inset 2px 0 0 var(--accent);
+}
+
+.tab-strip-item.active[data-drop="after"] {
+  box-shadow: inset 0 2px 0 var(--accent), inset -2px 0 0 var(--accent);
+}
+
+/* ===== 溢出「∨」清单按钮（多标签增强 T6）：与「+」同款形态 */
+.tab-strip-overflow {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.tab-strip-overflow:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+/* ===== 浮动菜单（多标签增强 T4/T6：右键菜单与溢出清单共用，tabMenu.tsx 消费） ===== */
+.tab-menu {
+  min-width: 180px;
+  max-width: 320px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.2);
+}
+
+.tab-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tab-menu-item:hover:not(:disabled),
+.tab-menu-item:focus-visible {
+  background: var(--bg-subtle);
+}
+
+.tab-menu-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+/* 溢出清单条目：文件名居左省略、装载状态居右 */
+.tab-overflow-item {
+  gap: 12px;
+}
+
+.tab-overflow-item[aria-current="true"] {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.tab-overflow-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-overflow-status {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+}

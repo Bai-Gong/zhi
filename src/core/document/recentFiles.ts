@@ -32,7 +32,14 @@ export function loadRecentFiles(): RecentFile[] {
 }
 
 function persist(files: RecentFile[]): RecentFile[] {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(files));
+  // 写入失败必须就地吸收：addRecentFile 的调用点在 openDocument 的 try 块内
+  // （装载已就绪），无保护的异常会把已就绪文档误标「装载失败」。隐私模式/
+  // 配额满时静默降级——最近文件是附属记录，不值得打断打开流程。
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(files));
+  } catch (error) {
+    console.warn("最近文件写入 localStorage 失败：", error);
+  }
   return files;
 }
 

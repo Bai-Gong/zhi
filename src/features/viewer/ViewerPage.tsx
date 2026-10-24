@@ -409,7 +409,8 @@ export function ViewerPage() {
               {status === "error" && (
                 <div className="viewer-error" role="alert">
                   <p>打开失败：{error ?? "未知错误"}</p>
-                  <p className="viewer-error-path">{path ?? fileName ?? ""}</p>
+                  {/* sourcePath 优先：批量关闭会把地址栏清到不带 ?path，失败标签仍需展示完整路径 */}
+                  <p className="viewer-error-path">{tab.sourcePath ?? path ?? fileName ?? ""}</p>
                 </div>
               )}
             </div>

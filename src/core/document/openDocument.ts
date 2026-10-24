@@ -39,6 +39,23 @@ export async function pickPdfFile(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
+/**
+ * 多选版「打开 PDF」对话框（Acrobat 式多标签）：一次可选多个文件，
+ * 用户取消返回 null。单选也返回单元素数组——单选/多选的**语义分叉归调用方**
+ * （单选沿用既有「同激活路径原地重开 / navigate 带 path」语义，见 hotkeys.openPickedPdf；
+ * 多选才走批量器 openDocumentsBatch）。组织/编辑入口仍用单选 pickPdfFile（单文档模式）。
+ */
+export async function pickPdfFiles(): Promise<string[] | null> {
+  const selected = await openFileDialog({
+    multiple: true,
+    directory: false,
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  if (selected === null) return null;
+  // multiple:true 时插件恒返回 string[]；Array.isArray 防御插件行为差异（单元素等）。
+  return Array.isArray(selected) ? selected : [selected];
+}
+
 function fileNameOf(path: string): string {
   const segments = path.split(/[\\/]/);
   return segments[segments.length - 1] || path;
@@ -307,6 +324,77 @@ export async function openDocument(path: string): Promise<string | null> {
     const message = error instanceof Error ? `装载文档信息失败：${error.message}` : "装载文档信息失败。";
     useDocumentStore.getState().failTab(tabId, message);
     return message;
+  }
+}
+
+/** 批量打开时随路径携带的会话恢复信息（T7 会话恢复）：装载成功后回写页码/缩放。 */
+export interface BatchRestoreHint {
+  /** 1 起页码（超界由 setCurrentPage 按页数夹取）。 */
+  page: number;
+  /** 0.25–4.0（超界由 setScale 夹取）。 */
+  scale: number;
+}
+
+/** 把恢复信息回写到**当前激活**标签（调用点须紧跟激活动作）；非 ready 态忽略。 */
+function applyRestoreHint(hint: BatchRestoreHint | undefined): void {
+  if (!hint) return;
+  const state = useDocumentStore.getState();
+  const tab = activeTabOf(state);
+  // readyTab 会先重置为第 1 页/100%，恢复写入必须发生在其后（openDocument resolve
+  // 之后或 activateTab 之后调用本函数即满足）；失败/装载中标签无可恢复会话。
+  if (tab.status !== "ready") return;
+  state.setCurrentPage(hint.page);
+  state.setScale(hint.scale);
+}
+
+/**
+ * 批量打开（多选对话框 / 会话恢复共用）：逐个处理路径——
+ * - 已打开的路径**仅激活**既有标签（不重置其页码/缩放/高亮会话，多选语义与
+ *   单选的「同路径原地重开」分叉点）；
+ * - 新路径串行 `await openDocument`（标签逐个出现即是装载过程反馈）；
+ * - 达到 {@link MAX_TABS} 后剩余新文件不再尝试（openDocument 的逐次拒绝
+ *   提示会被 beginLoadTab 清空，必须由这里聚合），装载失败的文件名同样聚合；
+ * - 全部结束后**一次性** rejectOpen 汇总未打开的文件与原因——beginLoadTab
+ *   每次都清 openRejection（store），逐个提示必被下一次装载吞掉。
+ * 最终激活的是最后处理的标签。`restores` 与路径一一对应（可 undefined），
+ * 供会话恢复回写每份文档的页码/缩放。
+ */
+export async function openDocumentsBatch(
+  paths: readonly string[],
+  restores?: ReadonlyArray<BatchRestoreHint | undefined>,
+): Promise<void> {
+  if (paths.length === 0) return;
+  const failures: string[] = [];
+  let capped = false;
+  for (let i = 0; i < paths.length; i += 1) {
+    const path = paths[i];
+    if (!path) continue;
+    const fileName = fileNameOf(path);
+    const existing = useDocumentStore.getState().tabs.find((t) => t.sourcePath === path);
+    if (existing) {
+      // 多选「已开仅激活」：保留其页码/缩放/高亮，不重置、不重开。
+      useDocumentStore.getState().activateTab(existing.id);
+      applyRestoreHint(restores?.[i]);
+      continue;
+    }
+    if (capped || useDocumentStore.getState().tabs.length >= MAX_TABS) {
+      capped = true;
+      failures.push(`${fileName}：标签已达上限（${MAX_TABS} 个）`);
+      continue;
+    }
+    const error = await openDocument(path);
+    if (error) {
+      // 装载失败的文件已由 failTab 置「打开失败」标签（保留 sourcePath 可见可重试），
+      // 这里只聚合文件名与原因进最终横幅。
+      failures.push(`${fileName}：${error}`);
+    } else {
+      applyRestoreHint(restores?.[i]);
+    }
+  }
+  if (failures.length > 0) {
+    useDocumentStore
+      .getState()
+      .rejectOpen(`批量打开：${failures.length} 个文件未能打开——${failures.join("；")}。`);
   }
 }
 

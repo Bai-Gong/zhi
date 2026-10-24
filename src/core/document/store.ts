@@ -71,8 +71,11 @@ export interface Highlight {
   color: string;
 }
 
-/** 标签数量上限（M2-计划 D1：超出由 openDocument 拒绝并给出可读提示）。 */
-export const MAX_TABS = 8;
+/**
+ * 标签数量上限（M2-计划 D1：超出由 openDocument 拒绝并给出可读提示）。
+ * 多标签增强由 8 提到 16（Acrobat 对齐批次）；内存出问题回退只需把本常量改回 8。
+ */
+export const MAX_TABS = 16;
 
 /**
  * 单个标签的文档会话（M2-计划 D1）：路径、页码、缩放、pdf.js 文档与高亮集
@@ -128,6 +131,13 @@ export interface DocumentStoreState {
   beginLoadTab: (path: string, fileName: string) => string;
   /** 激活一个标签（保留其页码/缩放/高亮等会话状态）。 */
   activateTab: (id: string) => void;
+  /**
+   * 把一个标签移动到新下标（拖拽重排，纯数据）：不可变数组重排，
+   * 不触碰任何 pdf.js 资源，也不改变 activeTabId——各标签会话状态
+   * （页码/缩放/高亮）与激活位一律不受重排影响。
+   * targetIndex 按「先摘除该标签后的数组」计，越界夹取，无效移动 no-op。
+   */
+  moveTab: (id: string, targetIndex: number) => void;
   /** 装载成功：写入元数据并回到第 1 页（M1 重开语义保持）。 */
   readyTab: (id: string, meta: DocumentMeta) => void;
   /** 装载失败：该标签置错误态（复位会话数据，但保留 loadGeneration 与 sourcePath/fileName）。 */
@@ -236,6 +246,18 @@ export const useDocumentStore = create<DocumentStoreState>((set, get) => ({
 
   activateTab: (id) =>
     set((s) => (s.activeTabId === id || !s.tabs.some((t) => t.id === id) ? {} : { activeTabId: id })),
+
+  moveTab: (id, targetIndex) =>
+    set((s) => {
+      const from = s.tabs.findIndex((t) => t.id === id);
+      if (from < 0) return {};
+      const to = Math.min(s.tabs.length - 1, Math.max(0, Math.round(targetIndex)));
+      if (from === to) return {};
+      const tabs = [...s.tabs];
+      const [moved] = tabs.splice(from, 1);
+      tabs.splice(to, 0, moved);
+      return { tabs }; // 纯数据重排：activeTabId 与各标签会话字段原样保留
+    }),
 
   readyTab: (id, meta) =>
     set((s) => ({

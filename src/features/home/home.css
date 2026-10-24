@@ -6,6 +6,66 @@
   color: var(--danger);
 }
 
+/* ===== 会话恢复卡片（多标签增强 T7）：上次标签集一键重开 + 忽略 ===== */
+.session-restore-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+}
+
+.session-restore-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-restore-title {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.session-restore-meta {
+  max-width: 480px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-restore-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.session-restore-ignore {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.session-restore-ignore:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.session-restore-ignore:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
 /* 最近文件：失效条目置灰、禁用重开（移除入口保留） */
 .recent-item.stale .recent-icon,
 .recent-item.stale .recent-name {

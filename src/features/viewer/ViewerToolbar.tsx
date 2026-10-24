@@ -258,8 +258,8 @@ export function ViewerToolbar() {
               ))}
             </ul>
             <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--text-muted)" }}>
-              焦点在输入框时快捷键不触发；Ctrl 亦可用 ⌘；Ctrl+W 在浏览器预览里是浏览器保留键，
-              仅在应用窗口内生效。
+              焦点在输入框时快捷键不触发；Ctrl 亦可用 ⌘；Ctrl+W / Ctrl+Tab / Ctrl+F4
+              在浏览器预览里是浏览器保留键，仅在应用窗口内生效。
             </p>
           </section>
         </div>
