@@ -222,16 +222,34 @@ async function readPageSizes(doc: PDFDocumentProxy, numPages: number, isStale: (
 }
 
 /**
- * 打开文档：新建标签（或重开同路径标签）并装载，成功后写入会话与最近文件。
- * 返回 null 表示装载已正常开始/完成；返回可读错误字符串表示请求被拒绝
- * （未指定路径 / 标签达到上限）或装载失败——失败同时写入该标签的错误态，
- * 拒绝则写入 store.openRejection（横幅提示），均不抛出。
+ * openDocument 的结果：error 与 tabId 分开携带，调用方可按**显式标签 id**
+ * 寻址回写（装载 await 期间激活位可能被用户切走，不能再按激活位回写）。
  */
-export async function openDocument(path: string): Promise<string | null> {
+export interface OpenDocumentResult {
+  /**
+   * 本轮 beginLoadTab 选中的标签 id（新建与同路径重开均有值）；
+   * 请求被拒绝（未指定路径 / 标签超上限，未建标签）时为 null。
+   */
+  tabId: string | null;
+  /**
+   * null 表示装载已正常开始/完成（含被更新一轮装载抢先而丢弃的结果）；
+   * 非 null 为可读错误（已写入该标签错误态或 store.openRejection），均不抛出。
+   */
+  error: string | null;
+}
+
+/**
+ * 打开文档：新建标签（或重开同路径标签）并装载，成功后写入会话与最近文件。
+ * 返回 {@link OpenDocumentResult}：`error` 非 null 表示请求被拒绝（未指定路径 /
+ * 标签达到上限）或装载失败——失败同时写入该标签的错误态，拒绝则写入
+ * store.openRejection（横幅提示）；`tabId` 供调用方对**本标签**做后续回写
+ * （如会话恢复的页码/缩放），不受装载期间激活位漂移影响。
+ */
+export async function openDocument(path: string): Promise<OpenDocumentResult> {
   if (!path) {
     const message = "未指定要打开的文件。";
     useDocumentStore.getState().rejectOpen(message);
-    return message;
+    return { tabId: null, error: message };
   }
   const fileName = fileNameOf(path);
   const state = useDocumentStore.getState();
@@ -240,7 +258,7 @@ export async function openDocument(path: string): Promise<string | null> {
   if (!existing && state.tabs.length >= MAX_TABS) {
     const message = `打开的文档标签已达上限（${MAX_TABS} 个），请先关闭部分标签再打开新文件。`;
     useDocumentStore.getState().rejectOpen(message);
-    return message;
+    return { tabId: null, error: message };
   }
   // 收集本轮要销毁的资源：只限目标标签自己的旧装载任务与旧文档，
   // 其他标签（含其正在进行的装载）一概不动——多标签并存的根基。
@@ -290,12 +308,12 @@ export async function openDocument(path: string): Promise<string | null> {
   if (isStale()) {
     // 目标标签已被更新的装载抢先或已关闭：本轮结果丢弃（只丢这一份文档）。
     void destroyDocument(doc);
-    return null;
+    return { tabId, error: null };
   }
   if (!doc) {
     const message = describeError(lastError, lastErrorSource);
     useDocumentStore.getState().failTab(tabId, message);
-    return message;
+    return { tabId, error: message };
   }
 
   try {
@@ -305,7 +323,7 @@ export async function openDocument(path: string): Promise<string | null> {
     ]);
     if (isStale()) {
       void destroyDocument(doc);
-      return null;
+      return { tabId, error: null };
     }
     useDocumentStore.getState().readyTab(tabId, {
       document: doc,
@@ -314,16 +332,16 @@ export async function openDocument(path: string): Promise<string | null> {
       outline,
     });
     addRecentFile({ path, fileName, numPages: doc.numPages });
-    return null;
+    return { tabId, error: null };
   } catch (error) {
     void destroyDocument(doc);
     if (isStale()) {
       // 已被更新的装载抢先：标签归新会话所有，不再写入本轮错误。
-      return null;
+      return { tabId, error: null };
     }
     const message = error instanceof Error ? `装载文档信息失败：${error.message}` : "装载文档信息失败。";
     useDocumentStore.getState().failTab(tabId, message);
-    return message;
+    return { tabId, error: message };
   }
 }
 
@@ -335,16 +353,19 @@ export interface BatchRestoreHint {
   scale: number;
 }
 
-/** 把恢复信息回写到**当前激活**标签（调用点须紧跟激活动作）；非 ready 态忽略。 */
-function applyRestoreHint(hint: BatchRestoreHint | undefined): void {
+/** 把恢复信息回写到指定标签（缺省为当前激活标签）；非 ready 态忽略。 */
+function applyRestoreHint(hint: BatchRestoreHint | undefined, tabId?: string): void {
   if (!hint) return;
   const state = useDocumentStore.getState();
-  const tab = activeTabOf(state);
+  const id = tabId ?? state.activeTabId;
+  if (!id) return;
   // readyTab 会先重置为第 1 页/100%，恢复写入必须发生在其后（openDocument resolve
   // 之后或 activateTab 之后调用本函数即满足）；失败/装载中标签无可恢复会话。
-  if (tab.status !== "ready") return;
-  state.setCurrentPage(hint.page);
-  state.setScale(hint.scale);
+  // 装载 await 期间激活位可能被用户切走，必须按本轮 tabId 寻址而非激活位。
+  const tab = state.tabs.find((t) => t.id === id);
+  if (!tab || tab.status !== "ready") return;
+  state.setCurrentPage(hint.page, id);
+  state.setScale(hint.scale, id);
 }
 
 /**
@@ -374,7 +395,7 @@ export async function openDocumentsBatch(
     if (existing) {
       // 多选「已开仅激活」：保留其页码/缩放/高亮，不重置、不重开。
       useDocumentStore.getState().activateTab(existing.id);
-      applyRestoreHint(restores?.[i]);
+      applyRestoreHint(restores?.[i], existing.id);
       continue;
     }
     if (capped || useDocumentStore.getState().tabs.length >= MAX_TABS) {
@@ -382,13 +403,13 @@ export async function openDocumentsBatch(
       failures.push(`${fileName}：标签已达上限（${MAX_TABS} 个）`);
       continue;
     }
-    const error = await openDocument(path);
+    const { tabId, error } = await openDocument(path);
     if (error) {
       // 装载失败的文件已由 failTab 置「打开失败」标签（保留 sourcePath 可见可重试），
       // 这里只聚合文件名与原因进最终横幅。
       failures.push(`${fileName}：${error}`);
-    } else {
-      applyRestoreHint(restores?.[i]);
+    } else if (tabId) {
+      applyRestoreHint(restores?.[i], tabId);
     }
   }
   if (failures.length > 0) {

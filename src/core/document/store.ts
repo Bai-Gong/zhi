@@ -148,10 +148,17 @@ export interface DocumentStoreState {
    * 的 closeDocument 编排——store 动作保持同步纯数据，杜绝「引用先丢、资源不释放」。
    */
   closeTab: (id: string) => void;
-  /** 翻页（作用于激活标签；1 起，按页数夹取）。 */
-  setCurrentPage: (page: number) => void;
-  /** 缩放（作用于激活标签；0.25–4.0 夹取）。 */
-  setScale: (scale: number) => void;
+  /**
+   * 翻页（1 起，按页数夹取）。缺省作用于**激活标签**；可选 tabId 定向到指定
+   * 标签——会话恢复等「装载期间激活位可能被用户切走」的回写必须按 id 寻址，
+   * 不能依赖激活位（标签不存在时自然 no-op）。
+   */
+  setCurrentPage: (page: number, tabId?: string) => void;
+  /**
+   * 缩放（0.25–4.0 夹取）。缺省作用于**激活标签**；可选 tabId 定向到指定标签
+   * （语义同 {@link setCurrentPage}）。
+   */
+  setScale: (scale: number, tabId?: string) => void;
   /** 新增高亮到激活标签；无就绪会话或矩形组为空时返回 null。 */
   addHighlight: (input: { pageNumber: number; rects: HighlightRect[]; color: string; id?: string }) => Highlight | null;
   /** 按 id 移除激活标签的一条高亮。 */
@@ -301,20 +308,22 @@ export const useDocumentStore = create<DocumentStoreState>((set, get) => ({
       return { tabs };
     }),
 
-  setCurrentPage: (page) =>
+  setCurrentPage: (page, tabId) =>
     set((s) => {
-      if (!s.activeTabId) return {};
+      const id = tabId ?? s.activeTabId;
+      if (!id) return {};
       return {
-        tabs: patchTab(s, s.activeTabId, (t) => ({
+        tabs: patchTab(s, id, (t) => ({
           currentPage: t.numPages <= 0 ? 1 : Math.min(t.numPages, Math.max(1, Math.round(page))),
         })),
       };
     }),
 
-  setScale: (scale) =>
+  setScale: (scale, tabId) =>
     set((s) => {
-      if (!s.activeTabId) return {};
-      return { tabs: patchTab(s, s.activeTabId, () => ({ scale: Math.min(4, Math.max(0.25, scale)) })) };
+      const id = tabId ?? s.activeTabId;
+      if (!id) return {};
+      return { tabs: patchTab(s, id, () => ({ scale: Math.min(4, Math.max(0.25, scale)) })) };
     }),
 
   addHighlight: (input) => {
