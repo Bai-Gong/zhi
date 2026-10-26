@@ -35,6 +35,18 @@ function dxaToPt(dxa: number): number {
   return Math.round((dxa / 20) * 100) / 100;
 }
 
+/** ZIP 条目信息（中央目录视角；供 docxPreprocess 重打包复用）。 */
+export interface ZipEntryInfo {
+  name: string;
+  /** 压缩方法：0=store、8=deflate。 */
+  method: number;
+  /** 压缩数据起始偏移（越过局部头）。 */
+  start: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  crc32: number;
+}
+
 /** 小端读 u16/u32。 */
 function readU16(bytes: Uint8Array, offset: number): number {
   return bytes[offset]! | (bytes[offset + 1]! << 8);
@@ -43,14 +55,9 @@ function readU32(bytes: Uint8Array, offset: number): number {
   return (bytes[offset]! | (bytes[offset + 1]! << 8) | (bytes[offset + 2]! << 16) | (bytes[offset + 3]! << 24)) >>> 0;
 }
 
-/**
- * 在 ZIP 中央目录里找指定条目，返回其压缩数据区间与方法。
- * 只支持常规 32 位偏移（ZIP64 的 0xFFFFFFFF 哨兵直接判失败——docx 远小于 4GB）。
- */
-function locateZipEntry(
-  bytes: Uint8Array,
-  wantedName: string,
-): { start: number; compressedSize: number; method: number } | null {
+/** 列出 ZIP 全部条目（只读中央目录与局部头；docxPreprocess 复用同一份实现）。 */
+export function listZipEntries(bytes: Uint8Array): ZipEntryInfo[] {
+  const out: ZipEntryInfo[] = [];
   // EOCD（0x06054b50）自尾部倒扫：固定 22 字节 + 最多 64KB 注释
   const eocdMin = Math.max(0, bytes.length - 22 - 65535);
   let eocd = -1;
@@ -60,39 +67,41 @@ function locateZipEntry(
       break;
     }
   }
-  if (eocd < 0) return null;
+  if (eocd < 0) return out;
   const entryCount = readU16(bytes, eocd + 10);
   let cursor = readU32(bytes, eocd + 16);
   for (let i = 0; i < entryCount; i += 1) {
-    if (cursor + 46 > bytes.length || readU32(bytes, cursor) !== 0x02014b50) return null;
+    if (cursor + 46 > bytes.length || readU32(bytes, cursor) !== 0x02014b50) return out;
     const method = readU16(bytes, cursor + 10);
+    const crc = readU32(bytes, cursor + 16);
     const compressedSize = readU32(bytes, cursor + 20);
+    const uncompressedSize = readU32(bytes, cursor + 24);
     const nameLength = readU16(bytes, cursor + 28);
     const extraLength = readU16(bytes, cursor + 30);
     const commentLength = readU16(bytes, cursor + 32);
     const localOffset = readU32(bytes, cursor + 42);
     const name = new TextDecoder().decode(bytes.subarray(cursor + 46, cursor + 46 + nameLength));
-    if (name === wantedName) {
-      // 局部头（0x04034b50）：名字/附加段长度与中央目录记录可能不同，须按局部头重读
-      if (localOffset + 30 > bytes.length || readU32(bytes, localOffset) !== 0x04034b50) return null;
+    // 局部头（0x04034b50）：名字/附加段长度与中央目录记录可能不同，须按局部头重读
+    let start = -1;
+    if (localOffset + 30 <= bytes.length && readU32(bytes, localOffset) === 0x04034b50) {
       const localNameLength = readU16(bytes, localOffset + 26);
       const localExtraLength = readU16(bytes, localOffset + 28);
-      const start = localOffset + 30 + localNameLength + localExtraLength;
-      return { start, compressedSize, method };
+      start = localOffset + 30 + localNameLength + localExtraLength;
     }
+    if (start >= 0) out.push({ name, method, start, compressedSize, uncompressedSize, crc32: crc });
     cursor += 46 + nameLength + extraLength + commentLength;
   }
-  return null;
+  return out;
 }
 
-async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
+export async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
   const buffer = await new Response(stream).arrayBuffer();
   return new Uint8Array(buffer);
 }
 
 async function readZipText(bytes: Uint8Array, name: string): Promise<string | null> {
-  const entry = locateZipEntry(bytes, name);
+  const entry = listZipEntries(bytes).find((e) => e.name === name);
   if (!entry) return null;
   const slice = bytes.subarray(entry.start, entry.start + entry.compressedSize);
   const raw = entry.method === 0 ? slice : entry.method === 8 ? await inflateRaw(slice) : null;

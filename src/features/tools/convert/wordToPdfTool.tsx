@@ -61,6 +61,18 @@ export const wordToPdfTool: WizardToolDefinition<void, DocxFileSummary> = {
             : `${sizeNote}（文档未声明页面设置，按 A4 常规边距兜底）`,
         },
       ];
+      if (result.mathLinearized > 0) {
+        details.push({
+          name: "公式转换",
+          note: `${result.mathLinearized} 处公式以文本形式保留（如 v^2=Δx/Δt），未做排版级还原`,
+        });
+      }
+      if (result.floatsStripped > 0) {
+        details.push({
+          name: "浮动图形",
+          note: `${result.floatsStripped} 处页边浮动装饰（如密封线/页眉贴图）不参与转换`,
+        });
+      }
       if (result.ignoredCount > 0) {
         details.push({
           name: "降级提示",

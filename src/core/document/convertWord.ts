@@ -11,6 +11,7 @@ import {
 import { buildLines, groupParagraphs, isRawTextItem, readingMatrixOf, type TextLine } from "./convertLayout";
 import { pdfjsLib } from "./pdfjs";
 import { FALLBACK_DOCX_PAGE_SETUP, parseDocxPageSetup, type DocxPageSetup } from "./docxPageSetup";
+import { preprocessDocxForMammoth } from "./docxPreprocess";
 import { paginateWordHtml, type WordPageGeometry } from "./wordPagination";
 
 /**
@@ -180,6 +181,10 @@ export interface WordToPdfResult {
   pageCount: number;
   /** mammoth 报告的不支持内容条数（>0 时结果页提示「部分复杂版式已降级」）。 */
   ignoredCount: number;
+  /** 预处理线性化的公式数量（>0 时结果页提示「公式以文本形式保留」）。 */
+  mathLinearized: number;
+  /** 预处理剥离的锚定浮动图形数量（页边装饰，>0 时结果页提示）。 */
+  floatsStripped: number;
   /** 实际采用的页面设置与来源（结果页展示「设置一致」的依据）。 */
   pageSetup: { geometry: WordPageGeometry; fromDocument: boolean };
 }
@@ -211,11 +216,16 @@ export async function runWordToPdf(
     marginBottomPt: base.bottomPt,
     marginLeftPt: base.leftPt,
   };
-  // mammoth 需要 ArrayBuffer；bytes.slice() 复制一份（原视图可能被复用）。
+  // mammoth 前预处理（best-effort，内部失败自动回退原始字节）：
+  // 公式线性化（mammoth 会整块丢 OMML）+ 剥离锚定浮动图形（页边装饰被
+  // mammoth 拉平进正文流会撑爆分页——试卷密封线图高≈整页，页数翻倍的根因）。
+  control.onStage("正在预处理 Word 文档…", null);
+  const pre = await preprocessDocxForMammoth(bytes);
+  // mammoth 需要 ArrayBuffer；pre.bytes.slice() 复制一份（原视图可能被复用）。
   let html: string;
   let ignoredCount = 0;
   try {
-    const copy = bytes.slice();
+    const copy = pre.bytes.slice();
     const result = await mammoth.convertToHtml({ arrayBuffer: copy.buffer });
     html = result.value;
     ignoredCount = result.messages.length;
@@ -233,5 +243,12 @@ export async function runWordToPdf(
     control,
     ignoredCount,
   );
-  return { bytes: pdfBytes, pageCount, ignoredCount, pageSetup: { geometry, fromDocument: setup !== null } };
+  return {
+    bytes: pdfBytes,
+    pageCount,
+    ignoredCount,
+    mathLinearized: pre.mathLinearized,
+    floatsStripped: pre.floatsStripped,
+    pageSetup: { geometry, fromDocument: setup !== null },
+  };
 }
