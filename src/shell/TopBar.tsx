@@ -6,7 +6,7 @@ import { ROUTES } from "./routes";
 import { useUiStore, type ThemePreference } from "./uiStore";
 
 const NAV_ITEMS = [
-  { to: ROUTES.home, label: "首页", end: true },
+  { to: ROUTES.home, label: "工具", end: true },
   { to: ROUTES.viewer, label: "查看器", end: false },
 ] as const;
 

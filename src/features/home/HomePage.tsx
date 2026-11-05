@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowUpRight, FilePlus2, Files, Scissors, LayoutGrid, ArrowRightLeft, House, Clock3, Search, ShieldCheck } from "lucide-react";
+import { FilePlus2, Files, LayoutGrid, ArrowRightLeft, BookOpen, Clock3, Search } from "lucide-react";
 import { openDocumentsBatch, pickPdfFile, pickPdfFiles, useDocumentStore } from "../../core/document";
 import { loadLastSession, clearLastSession, type SessionSnapshot } from "../../core/document/sessionRestore";
 import { syncViewerRouteToActiveTab } from "../../shell/hotkeys";
@@ -27,7 +27,7 @@ export function HomePage() {
   const navigate = useNavigate();
   const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
-  const [view, setView] = useState("workbench");
+  const [view, setView] = useState("tools");
   const [openError, setOpenError] = useState<string | null>(null);
   // 上次会话快照（多标签增强 T7）：挂载时读一次；「忽略」或发起恢复后清空本地展示。
   const [lastSession, setLastSession] = useState<SessionSnapshot | null>(() => loadLastSession());
@@ -115,27 +115,38 @@ export function HomePage() {
     [navigate],
   );
 
+  const categories = [
+    { id: "all", name: "全部工具", icon: LayoutGrid },
+    { id: "pages", name: "合并与整理", icon: Files },
+    { id: "convert", name: "格式转换", icon: ArrowRightLeft },
+    { id: "read", name: "阅读与编辑", icon: BookOpen },
+  ];
+
   return (
     <div className="home-page">
-      <aside className="workspace-nav" aria-label="工作台导航">
-        <div className="workspace-label">文档空间 <span>WORKSPACE</span></div>
-        <button className={view === "workbench" ? "selected" : ""} onClick={() => setView("workbench")}><House size={18} />工作台</button>
-        <button className={view === "recent" ? "selected" : ""} onClick={() => setView("recent")}><Clock3 size={18} />最近文档</button>
-        <div className="workspace-label nav-tools-label">文档工具</div>
-        {[{ id: "all", name: "全部工具", icon: LayoutGrid }, { id: "pages", name: "合并与整理", icon: Files }, { id: "convert", name: "格式转换", icon: ArrowRightLeft }].map(item => <button key={item.id} className={view === "tools" && category === item.id ? "selected" : ""} onClick={() => { setView("tools"); setCategory(item.id); setQuery(""); }}><item.icon size={18} />{item.name}</button>)}
-        <div className="workspace-note"><ShieldCheck size={20} /><strong>文件留在你的设备</strong><span>本地处理，安心创作。</span></div>
+      <aside className="workspace-nav" aria-label="文档工具导航">
+        <div className="workspace-label">工具</div>
+        {categories.map(item => (
+          <button key={item.id}
+            aria-pressed={view === "tools" && category === item.id}
+            className={view === "tools" && category === item.id ? "selected" : ""}
+            onClick={() => { setView("tools"); setCategory(item.id); setQuery(""); }}>
+            <item.icon size={18} aria-hidden />{item.name}
+          </button>
+        ))}
+        <div className="workspace-label nav-tools-label">文件</div>
+        <button aria-pressed={view === "recent"} className={view === "recent" ? "selected" : ""}
+          onClick={() => setView("recent")}><Clock3 size={18} aria-hidden />最近文档</button>
       </aside>
       <div className="workspace-content">
-        <div className="workspace-heading"><div><span className="eyebrow">BAIGONG / ZHI</span><h1>{view === "recent" ? "最近文档" : view === "tools" ? "你的文档工具箱" : "让文档，井井有条。"}</h1><p>阅读、整理、转换。把琐碎的文档工作，变得简单。</p></div><span className="workspace-edition">个人工作空间</span></div>
-        {view === "workbench" && <section className="home-hero">
-          <div className="hero-copy"><span className="eyebrow">从一份文档开始</span><h2>每一页，都有新可能。</h2><p>选择一个或多个 PDF 继续阅读，或选择下方工具开始处理。</p><button type="button" className="primary-button" onClick={() => void handleOpen()}><FilePlus2 size={18} />打开 PDF 文件<ArrowUpRight size={16} /></button></div>
-          <div className="paper-art" aria-hidden="true"><div className="art-sheet back" /><div className="art-sheet front"><span>纸。</span><i /><i /><i /><div className="art-seal">百工</div></div><span className="art-caption">A LITTLE LESS PAPERWORK.</span></div>
-        </section>}
+        <header className="workspace-heading">
+          <h1>{view === "recent" ? "最近文档" : categories.find(item => item.id === category)?.name}</h1>
+          <button type="button" className="primary-button" onClick={() => void handleOpen()}>
+            <FilePlus2 size={18} aria-hidden />打开 PDF
+          </button>
+        </header>
         {openError && <p className="home-error" role="alert">打开文件出错：{openError}</p>}
-        {view === "workbench" && <section className="quick-actions" aria-label="常用文档任务">
-          {[{ title: "合并文档", desc: "多份文件，合为一本", icon: Files, action: () => openToolWizard("merge") }, { title: "拆分文档", desc: "按需拆分，轻松分发", icon: Scissors, action: () => openToolWizard("split") }, { title: "整理页面", desc: "排序、旋转、删除", icon: LayoutGrid, action: () => void handleOpenOrganize() }, { title: "转换格式", desc: "PDF、Word 与图片互转", icon: ArrowRightLeft, action: () => { setCategory("convert"); setView("tools"); } }].map(item => <button key={item.title} onClick={item.action}><item.icon size={22} /><span><strong>{item.title}</strong><small>{item.desc}</small></span><ArrowUpRight size={16} /></button>)}
-        </section>}
-      {view !== "tools" && lastSession && lastSession.tabs.length > 0 && (
+      {lastSession && lastSession.tabs.length > 0 && (
         <section className="home-section" aria-label="恢复上次会话">
           <h2 className="home-section-title">上次会话</h2>
           <div className="session-restore-card">
@@ -168,17 +179,25 @@ export function HomePage() {
           </div>
         </section>
       )}
-        {view !== "tools" && <RecentFileList onOpen={openViewer} onOrganize={(path) => navigate(buildOrganizeUrl(path))} />}
-        {view !== "recent" && <><div className="tool-section-heading"><div><h2>为每一步，找到合适的工具</h2><p>从整理到交付，一处完成。</p></div><label className="tool-search"><Search size={17} /><input aria-label="搜索工具" placeholder="搜索工具…" value={query} onChange={e => setQuery(e.target.value)} />{query && <button aria-label="清空搜索" onClick={() => setQuery("")}>×</button>}</label></div><div className="tool-filters" aria-label="工具分类">{[{ id: "all", name: "全部工具" }, { id: "pages", name: "合并与整理" }, { id: "convert", name: "格式转换" }, { id: "read", name: "阅读与编辑" }].map(item => <button key={item.id} aria-pressed={category === item.id} onClick={() => setCategory(item.id)}>{item.name}</button>)}</div>
-      <ToolCards category={category} query={query}
-        onOpenReader={() => void handleOpen()}
-        onOpenOrganize={() => void handleOpenOrganize()}
-        onOpenEdit={() => void handleOpenEdit()}
-        onOpenMerge={() => openToolWizard("merge")}
-        onOpenSplit={() => openToolWizard("split")}
-        onOpenToolWizard={openToolWizard}
-      /></>}
-      <footer className="workspace-footer"><span>百工·纸</span><span>专注内容，其他交给纸。</span></footer>
+        {view === "recent" ? (
+          <RecentFileList onOpen={openViewer} onOrganize={(path) => navigate(buildOrganizeUrl(path))} />
+        ) : (
+          <>
+            <label className="tool-search">
+              <Search size={17} aria-hidden />
+              <input aria-label="搜索当前分类的工具" placeholder="搜索当前分类的工具" value={query} onChange={e => setQuery(e.target.value)} />
+              {query && <button aria-label="清空搜索" onClick={() => setQuery("")}>×</button>}
+            </label>
+            <ToolCards category={category} query={query}
+              onOpenReader={() => void handleOpen()}
+              onOpenOrganize={() => void handleOpenOrganize()}
+              onOpenEdit={() => void handleOpenEdit()}
+              onOpenMerge={() => openToolWizard("merge")}
+              onOpenSplit={() => openToolWizard("split")}
+              onOpenToolWizard={openToolWizard}
+            />
+          </>
+        )}
       </div>
     </div>
   );

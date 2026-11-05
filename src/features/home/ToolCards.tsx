@@ -47,21 +47,21 @@ const TOOLS: ToolCard[] = [
   {
     id: "reader",
     title: "阅读查看",
-    description: "连续滚动阅读、缩放、翻页与书签导航",
+    description: "打开 PDF，阅读与查找内容",
     icon: BookOpen,
     available: true,
   },
   {
     id: "merge",
     title: "合并 PDF",
-    description: "多个 PDF 按顺序合并成册，可按页码范围选取",
+    description: "将多个 PDF 合并为一个文件",
     icon: Files,
     available: true,
   },
   {
     id: "split",
     title: "拆分 PDF",
-    description: "按每 N 页、顶级书签或页码范围拆分导出",
+    description: "按页码、书签或固定页数拆分",
     icon: Scissors,
     available: true,
   },
@@ -89,7 +89,7 @@ const TOOLS: ToolCard[] = [
   {
     id: "pdf-to-images",
     title: "PDF 转图片",
-    description: "逐页导出 PNG/JPG（96/192 dpi），文件名带页码",
+    description: "将 PDF 页面导出为 PNG 或 JPG",
     icon: FileOutput,
     available: true,
     toolId: "pdf-to-images",
@@ -97,7 +97,7 @@ const TOOLS: ToolCard[] = [
   {
     id: "images-to-pdf",
     title: "图片转 PDF",
-    description: "多张图片按顺序合成 PDF，可设页面与边距",
+    description: "将多张图片合成为 PDF",
     icon: Images,
     available: true,
     toolId: "images-to-pdf",
@@ -105,7 +105,7 @@ const TOOLS: ToolCard[] = [
   {
     id: "pdf-to-word",
     title: "PDF 转 Word",
-    description: "文本型 PDF 转 .docx，按阅读顺序重建段落",
+    description: "将文本型 PDF 转为 Word 文档",
     icon: FileText,
     available: true,
     toolId: "pdf-to-word",
@@ -113,7 +113,7 @@ const TOOLS: ToolCard[] = [
   {
     id: "word-to-pdf",
     title: "Word 转 PDF",
-    description: ".docx 转 PDF，无需配置：按文档自身页面设置",
+    description: "将 Word 文档（.docx）转为 PDF",
     icon: FileDown,
     available: true,
     toolId: "word-to-pdf",
@@ -147,7 +147,11 @@ export function ToolCards({
     if (tool.toolId) return () => onOpenToolWizard(tool.toolId as string);
     return null;
   };
-  const filtered = TOOLS.filter(tool => tool.available &&
+  const orderedTools = [...TOOLS].sort((a, b) => {
+    const order = ["merge", "split", "organize", "pdf-to-word", "word-to-pdf", "pdf-to-images", "images-to-pdf", "reader", "edit"];
+    return order.indexOf(a.id) - order.indexOf(b.id);
+  });
+  const filtered = orderedTools.filter(tool => tool.available &&
     (category === "all" || (category === "convert" ? !!tool.toolId : category === "pages" ? ["merge", "split", "organize"].includes(tool.id) : ["reader", "edit"].includes(tool.id))) &&
     `${tool.title} ${tool.description}`.toLowerCase().includes(query.trim().toLowerCase()));
   return (

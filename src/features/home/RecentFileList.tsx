@@ -69,7 +69,7 @@ export function RecentFileList({ onOpen, onOrganize }: RecentFileListProps) {
     <section className="home-section" aria-label="最近文件">
       <div className="recent-heading"><h2 className="home-section-title">最近文件</h2>{files.length > 0 && <div className="recent-controls"><input aria-label="搜索最近文件" placeholder="查找文件名…" value={query} onChange={event => setQuery(event.target.value)} /><select aria-label="文件排序" value={sort} onChange={event => setSort(event.target.value)}><option value="recent">最近打开</option><option value="name">文件名称</option></select></div>}</div>
       {files.length === 0 ? (
-        <div className="home-empty recent-empty"><FileText size={28} /><div><strong>你的下一份好文档，从这里开始</strong><p>打开过的 PDF 会出现在这里，随时接着处理。</p></div></div>
+        <div className="home-empty recent-empty"><FileText size={28} /><div><strong>暂无最近文档</strong><p>点击右上角「打开 PDF」选择文件。</p></div></div>
       ) : (
         <ul className="recent-list">
           {visibleFiles.length === 0 && <li className="home-empty">没有匹配的文件。</li>}
