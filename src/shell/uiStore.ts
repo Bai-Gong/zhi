@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { applyResolvedTheme, resolveTheme, watchSystemTheme, type ThemePreference, type ResolvedTheme } from "./theme";
+import { applyNativeTheme, applyResolvedTheme, resolveTheme, watchSystemTheme, type ThemePreference, type ResolvedTheme } from "./theme";
 
 export type { ThemePreference, ResolvedTheme } from "./theme";
 export type SidebarTab = "thumbnails" | "bookmarks";
@@ -121,10 +121,16 @@ export const useUiStore = create<UiState>((set, get) => ({
 
 // 首帧前应用一次解析后的主题
 applyResolvedTheme(initialResolved);
+applyNativeTheme(initialPrefs.themePreference);
 
 // 主题变化 → 写 <html data-theme>；任意偏好变化 → 持久化
+let lastNativePreference = initialPrefs.themePreference;
 let lastAppliedTheme: ResolvedTheme = initialResolved;
 useUiStore.subscribe((s) => {
+  if (s.themePreference !== lastNativePreference) {
+    lastNativePreference = s.themePreference;
+    applyNativeTheme(s.themePreference);
+  }
   if (s.resolvedTheme !== lastAppliedTheme) {
     lastAppliedTheme = s.resolvedTheme;
     applyResolvedTheme(s.resolvedTheme);

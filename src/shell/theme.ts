@@ -1,3 +1,6 @@
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+
 /**
  * 主题骨架（shell 模块）：浅色 / 深色 / 跟随系统。
  * 主题以 CSS 变量落地（浅色基线在 src/styles/global.css，深色覆盖在 shell/theme.css），
@@ -36,4 +39,11 @@ export function watchSystemTheme(listener: (dark: boolean) => void): () => void 
   const mql = window.matchMedia(PREFERS_DARK_QUERY);
   mql.addEventListener("change", (event) => listener(event.matches));
   return () => mql.removeEventListener("change", (event) => listener(event.matches));
+}
+
+/** Keep AppKit material and native controls aligned with the selected theme. */
+export function applyNativeTheme(preference: ThemePreference): void {
+  if (!isTauri()) return;
+  void getCurrentWindow().setTheme(preference === "system" ? null : preference)
+    .catch(error => console.warn("无法同步窗口主题：", error));
 }

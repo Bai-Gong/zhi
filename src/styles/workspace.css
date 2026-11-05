@@ -69,3 +69,31 @@
   .top-bar-title { display:none; }
 }
 @supports not (backdrop-filter:blur(1px)) { :root { --glass:var(--bg-panel); } }
+
+/* AppKit blurs the real desktop; keep the webview and shell transparent. */
+:root[data-native-material="macos"] {
+  --glass: #ffffff30;
+  --glass-edge: #ffffff70;
+  --bg-panel: #f8fafbe0;
+  background: transparent;
+}
+:root[data-native-material="macos"][data-theme="dark"] {
+  --glass: #17282d38;
+  --glass-edge: #ffffff24;
+  --bg-panel: #22363de0;
+}
+:root[data-native-material="macos"] body { background: transparent; }
+:root[data-native-material="macos"] .app-shell {
+  background: #f1f5f51a;
+  border-radius: 12px;
+  overflow: hidden;
+}
+:root[data-native-material="macos"][data-theme="dark"] .app-shell { background: #11222838; }
+:root[data-native-material="macos"] .top-bar { padding-left: 84px; }
+:root[data-native-material="macos"] .window-controls { display: none; }
+:root[data-native-material="macos"] .workspace-nav,
+:root[data-native-material="macos"] .top-bar { background: #ffffff0a; }
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-native-material="macos"] .app-shell { background: var(--bg-app); }
+  :root[data-native-material="macos"] { --glass: var(--bg-panel); }
+}
