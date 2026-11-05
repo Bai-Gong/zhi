@@ -10,8 +10,9 @@
         "minWidth": 960,
         "minHeight": 600,
         "decorations": true,
-        "titleBarStyle": "Visible",
-        "hiddenTitle": false,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 14, "y": 15 },
+        "hiddenTitle": true,
         "transparent": true,
         "windowEffects": {
           "effects": ["liquidGlassRegular", "sidebar"],

@@ -89,7 +89,8 @@
   overflow: hidden;
 }
 :root[data-native-material="macos"][data-theme="dark"] .app-shell { background: #11222838; }
-:root[data-native-material="macos"] .top-bar { padding: 0 18px; height: 44px; }
+/* Native traffic lights share the 44px toolbar; reserve their hit area. */
+:root[data-native-material="macos"] .top-bar { padding: 0 18px 0 88px; height: 44px; }
 :root[data-native-material="macos"] .top-bar-brand { display: none; }
 :root[data-native-material="macos"] .window-controls { display: none; }
 :root[data-native-material="macos"] .workspace-nav,
