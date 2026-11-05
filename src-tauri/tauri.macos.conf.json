@@ -14,7 +14,7 @@
         "hiddenTitle": true,
         "transparent": true,
         "windowEffects": {
-          "effects": ["sidebar"],
+          "effects": ["liquidGlassRegular", "sidebar"],
           "state": "active",
           "radius": 12
         }

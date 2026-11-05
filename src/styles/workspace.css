@@ -84,7 +84,7 @@
 }
 :root[data-native-material="macos"] body { background: transparent; }
 :root[data-native-material="macos"] .app-shell {
-  background: #f1f5f51a;
+  background: #f1f5f526;
   border-radius: 12px;
   overflow: hidden;
 }
