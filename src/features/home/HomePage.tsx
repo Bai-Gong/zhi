@@ -124,7 +124,7 @@ export function HomePage() {
 
   return (
     <div className="home-page">
-      <aside className="workspace-nav" aria-label="文档工具导航">
+      <aside className="workspace-nav fang-glass-surface fang-glass-chrome" aria-label="文档工具导航">
         <div className="workspace-label">工具</div>
         {categories.map(item => (
           <button key={item.id}
@@ -149,7 +149,7 @@ export function HomePage() {
       {lastSession && lastSession.tabs.length > 0 && (
         <section className="home-section" aria-label="恢复上次会话">
           <h2 className="home-section-title">上次会话</h2>
-          <div className="session-restore-card">
+          <div className="session-restore-card fang-glass-surface">
             <div className="session-restore-info">
               <span className="session-restore-title">
                 恢复上次会话（{lastSession.tabs.length} 个文档）

@@ -30,7 +30,7 @@ export function TopBar() {
   const theme = THEME_CYCLE[themePreference];
 
   return (
-    <header className="top-bar" data-tauri-drag-region>
+    <header className="top-bar fang-glass-surface fang-glass-chrome" data-tauri-drag-region>
       <div className="top-bar-brand" data-tauri-drag-region>
         <span className="top-bar-logo" data-tauri-drag-region aria-hidden>
           纸

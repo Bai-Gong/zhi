@@ -141,7 +141,7 @@ export function ViewerToolbar() {
   const zoomBy = (factor: number) => setScale(clampScale(scale * factor));
 
   return (
-    <div className="viewer-toolbar" role="toolbar" aria-label="查看器工具栏">
+    <div className="viewer-toolbar fang-glass-surface" role="toolbar" aria-label="查看器工具栏">
       <div className="toolbar-group">
         <IconButton icon={FolderOpen} label="打开 PDF 文件（Ctrl+O）" onClick={handleOpen} />
         <IconButton icon={FileX} label="关闭文档（Ctrl+W）" disabled={!hasDocument} onClick={handleClose} />

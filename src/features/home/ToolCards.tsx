@@ -172,14 +172,14 @@ export function ToolCards({
           const onClick = entryOf(tool);
           if (!tool.available || !onClick) {
             return (
-              <div key={tool.id} className="tool-card unavailable" aria-disabled="true">
+              <div key={tool.id} className="tool-card fang-glass-surface unavailable" aria-disabled="true">
                 {body}
                 <span className="tool-badge">未上线</span>
               </div>
             );
           }
           return (
-            <button key={tool.id} type="button" className="tool-card" onClick={onClick}>
+            <button key={tool.id} type="button" className="tool-card fang-glass-surface" onClick={onClick}>
               {body}
             </button>
           );

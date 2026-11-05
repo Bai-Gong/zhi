@@ -40,14 +40,14 @@ export function Sidebar() {
 
   if (sidebarCollapsed) {
     return (
-      <nav className="sidebar collapsed" aria-label="侧栏（已折叠）">
+      <nav className="sidebar fang-glass-surface collapsed" aria-label="侧栏（已折叠）">
         <IconButton icon={PanelLeftOpen} label="展开侧栏" onClick={toggleSidebar} />
       </nav>
     );
   }
 
   return (
-    <nav className="sidebar" aria-label="侧栏">
+    <nav className="sidebar fang-glass-surface" aria-label="侧栏">
       <div className="sidebar-header">
         <div className="sidebar-tabs" role="tablist" aria-label="侧栏页签">
           {TABS.map((tab) => {

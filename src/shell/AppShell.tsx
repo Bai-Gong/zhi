@@ -73,7 +73,7 @@ export function AppShell() {
   }, [location.pathname]);
 
   return (
-    <div className="app-shell">
+    <div className="app-shell fang-glass-shell">
       {/* TopBar 沉浸决策（T7，自行判断）：一并隐藏。顶栏承载的是应用级导航与主题
           切换，与「阅读」无关，沉浸的目标就是纯阅读画布；边缘唤出时顶栏随阅读
           界面一起临时回归（唤出即完整界面，避免「唤出了一半」的割裂感），Esc
@@ -89,7 +89,7 @@ export function AppShell() {
         {isViewer &&
           chromeVisible &&
           (rightPanelVisible ? (
-            <aside className="shell-aside" aria-label="右侧面板">
+            <aside className="shell-aside fang-glass-surface" aria-label="右侧面板">
               <div className="shell-aside-header">
                 <span className="shell-aside-title">任务面板</span>
                 <IconButton icon={PanelRightClose} label="收起右侧面板" onClick={toggleRightPanel} />
@@ -99,7 +99,7 @@ export function AppShell() {
               </div>
             </aside>
           ) : (
-            <aside className="shell-aside collapsed" aria-label="右侧面板（已收起）">
+            <aside className="shell-aside fang-glass-surface collapsed" aria-label="右侧面板（已收起）">
               <IconButton icon={PanelRightOpen} label="展开右侧面板" onClick={toggleRightPanel} />
             </aside>
           ))}
