@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText, X } from "lucide-react";
+import { FileText, X, LayoutGrid } from "lucide-react";
 import { exists } from "@tauri-apps/plugin-fs";
 import {
   loadRecentFiles,
@@ -15,6 +15,7 @@ type Existence = "ok" | "missing" | "unknown";
 interface RecentFileListProps {
   /** 一键重开：跳 /viewer?path=…，由 core 的 openDocument 装载并刷新打开时间（去重置顶）。 */
   onOpen: (path: string) => void;
+  onOrganize: (path: string) => void;
 }
 
 /**
@@ -22,7 +23,9 @@ interface RecentFileListProps {
  * 持久化（localStorage 键 zhi.recentFiles，去重置顶、上限 20）归 core/document
  * 唯一实现，本组件只消费其读写接口；路由切换回首页时组件重挂载、列表重新读取。
  */
-export function RecentFileList({ onOpen }: RecentFileListProps) {
+export function RecentFileList({ onOpen, onOrganize }: RecentFileListProps) {
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState("recent");
   const [files, setFiles] = useState<RecentFile[]>(() => loadRecentFiles());
   const [existence, setExistence] = useState<Record<string, Existence>>({});
   const resultsRef = useRef<Record<string, Existence>>({});
@@ -61,14 +64,16 @@ export function RecentFileList({ onOpen }: RecentFileListProps) {
     setFiles(removeRecentFile(path));
   };
 
+  const visibleFiles = files.filter(file => file.fileName.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => sort === "name" ? a.fileName.localeCompare(b.fileName, "zh-CN") : b.openedAt - a.openedAt);
   return (
     <section className="home-section" aria-label="最近文件">
-      <h2 className="home-section-title">最近文件</h2>
+      <div className="recent-heading"><h2 className="home-section-title">最近文件</h2>{files.length > 0 && <div className="recent-controls"><input aria-label="搜索最近文件" placeholder="查找文件名…" value={query} onChange={event => setQuery(event.target.value)} /><select aria-label="文件排序" value={sort} onChange={event => setSort(event.target.value)}><option value="recent">最近打开</option><option value="name">文件名称</option></select></div>}</div>
       {files.length === 0 ? (
-        <p className="home-empty">还没有打开过的文件——点上方「打开 PDF 文件」开始。</p>
+        <div className="home-empty recent-empty"><FileText size={28} /><div><strong>你的下一份好文档，从这里开始</strong><p>打开过的 PDF 会出现在这里，随时接着处理。</p></div></div>
       ) : (
         <ul className="recent-list">
-          {files.map((file) => {
+          {visibleFiles.length === 0 && <li className="home-empty">没有匹配的文件。</li>}
+          {visibleFiles.map((file) => {
             const missing = existence[file.path] === "missing";
             const meta = missing
               ? "文件已不存在"
@@ -90,6 +95,7 @@ export function RecentFileList({ onOpen }: RecentFileListProps) {
                   <span className="recent-name">{file.fileName}</span>
                   <span className="recent-pages">{meta}</span>
                 </button>
+                {!missing && <IconButton icon={LayoutGrid} label={`整理 ${file.fileName} 的页面`} onClick={() => onOrganize(file.path)} />}
                 <IconButton icon={X} label="从最近文件移除" onClick={() => handleRemove(file.path)} />
               </li>
             );

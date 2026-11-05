@@ -15,6 +15,8 @@ import {
 import type { IconComponentProps } from "../../components/IconButton";
 
 interface ToolCardsProps {
+  category: string;
+  query: string;
   /** 启动阅读工具：弹出文件选择框并进入查看器。 */
   onOpenReader: () => void;
   /** 启动页面组织（M3）：弹出文件选择框并进入组织视图。 */
@@ -127,6 +129,7 @@ const TOOLS: ToolCard[] = [
 
 /** 功能入口卡片：可用工具可点击进入，未上线工具置灰并标「未上线」。 */
 export function ToolCards({
+  category, query,
   onOpenReader,
   onOpenOrganize,
   onOpenEdit,
@@ -144,11 +147,14 @@ export function ToolCards({
     if (tool.toolId) return () => onOpenToolWizard(tool.toolId as string);
     return null;
   };
+  const filtered = TOOLS.filter(tool => tool.available &&
+    (category === "all" || (category === "convert" ? !!tool.toolId : category === "pages" ? ["merge", "split", "organize"].includes(tool.id) : ["reader", "edit"].includes(tool.id))) &&
+    `${tool.title} ${tool.description}`.toLowerCase().includes(query.trim().toLowerCase()));
   return (
     <section className="home-section" aria-label="功能入口">
-      <h2 className="home-section-title">工具箱</h2>
+      {filtered.length === 0 && <p className="home-empty">没有找到匹配的工具，请更换关键词或分类。</p>}
       <div className="tool-grid">
-        {TOOLS.map((tool) => {
+        {filtered.map((tool) => {
           const Icon = tool.icon;
           const body = (
             <>

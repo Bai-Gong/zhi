@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Copy, Minus, Square, X } from "lucide-react";
+import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 /**
@@ -13,6 +14,7 @@ export function WindowControls() {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
+    if (!isTauri()) return;
     const win = getCurrentWindow();
     let alive = true;
     let unlisten: (() => void) | undefined;
@@ -31,6 +33,7 @@ export function WindowControls() {
     };
   }, []);
 
+  if (!isTauri()) return null;
   const win = getCurrentWindow();
   const MaximizeIcon = maximized ? Copy : Square;
   const maximizeLabel = maximized ? "还原" : "最大化";
