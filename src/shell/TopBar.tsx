@@ -56,7 +56,7 @@ export function TopBar() {
         <span className="top-bar-theme-text" data-tauri-drag-region aria-hidden>
           {theme.text}
         </span>
-        <WindowControls />
+        {document.documentElement.dataset.nativeMaterial !== "macos" && <WindowControls />}
       </div>
     </header>
   );

@@ -155,6 +155,9 @@ export function installHotkeys(navigate: HotkeyNavigator): () => void {
   // 常规分发走冒泡：晚于查看器滚动容器的翻页监听执行，defaultPrevented 即让位。
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.defaultPrevented) return;
+    // Native macOS menus own these accelerators; do not dispatch twice.
+    if (document.documentElement.dataset.nativeMaterial === "macos" && event.metaKey &&
+        ["o", "w"].includes(event.key.toLowerCase())) return;
     const target = event.target instanceof Element ? event.target : null;
     if (target && target.closest("input, textarea, select, [contenteditable='true']")) return;
 
