@@ -16,7 +16,7 @@ export type {
   HighlightRect,
 } from "./store";
 
-export { openDocument, closeDocument, pickPdfFile, pickPdfFiles, openDocumentsBatch, getPage } from "./openDocument";
+export { openDocument, closeDocument, pickPdfFile, pickPdfFiles, pickDocumentFile, pickDocumentFiles, openDocumentsBatch, getPage } from "./openDocument";
 export type { BatchRestoreHint } from "./openDocument";
 
 export { loadLastSession, clearLastSession } from "./sessionRestore";

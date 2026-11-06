@@ -1,3 +1,4 @@
+import type { DocumentFormat } from "./officeValidation";
 /** 最近文件的唯一读写实现（技术方案模块 5 与 5.1 第 2 条）：localStorage 键 zhi.recentFiles。 */
 export interface RecentFile {
   /** 本地绝对路径，唯一标识。 */
@@ -6,6 +7,7 @@ export interface RecentFile {
   /** 打开时间（epoch 毫秒）。 */
   openedAt: number;
   numPages?: number;
+  sourceFormat?: DocumentFormat;
 }
 
 const STORAGE_KEY = "zhi.recentFiles";

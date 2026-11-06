@@ -4,6 +4,7 @@ import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { IconButton } from "../components/IconButton";
 import { Sidebar } from "../features/sidebar/Sidebar";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { installDocumentDrop } from "./documentDrop";
 import { installNativeMenu } from "./nativeMenu";
 import { installHotkeys } from "./hotkeys";
 import { TopBar } from "./TopBar";
@@ -46,6 +47,7 @@ export function AppShell() {
   // 全局快捷键（T8）：navigate 注入保留 replace 语义；navigate 引用稳定，装一次即可。
   useEffect(() => installHotkeys(navigate), [navigate]);
   useEffect(() => installNativeMenu(navigate), [navigate]);
+  useEffect(() => installDocumentDrop(navigate), [navigate]);
 
   const edgeRevealed = useImmersiveEdges(immersive && isViewer);
   const chromeVisible = !immersive || !isViewer || edgeRevealed;

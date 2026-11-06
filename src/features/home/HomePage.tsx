@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FilePlus2, Files, LayoutGrid, ArrowRightLeft, BookOpen, Clock3, Search } from "lucide-react";
-import { openDocumentsBatch, pickPdfFile, pickPdfFiles, useDocumentStore } from "../../core/document";
+import { openDocumentsBatch, pickPdfFile, pickDocumentFiles, useDocumentStore } from "../../core/document";
 import { loadLastSession, clearLastSession, type SessionSnapshot } from "../../core/document/sessionRestore";
 import { syncViewerRouteToActiveTab } from "../../shell/hotkeys";
 import { buildEditUrl, buildOrganizeUrl, buildToolWizardUrl, buildViewerUrl } from "../../shell/routes";
@@ -42,7 +42,7 @@ export function HomePage() {
   const handleOpen = useCallback(async () => {
     setOpenError(null);
     try {
-      const paths = await pickPdfFiles();
+      const paths = await pickDocumentFiles();
       if (!paths || paths.length === 0) return;
       if (paths.length === 1) {
         openViewer(paths[0]);
@@ -67,7 +67,7 @@ export function HomePage() {
     try {
       await openDocumentsBatch(
         session.tabs.map((t) => t.path),
-        session.tabs.map((t) => ({ page: t.page, scale: t.scale })),
+        session.tabs.map((t) => ({ page: t.page, scale: t.scale, officeOptions: t.officeOptions })),
       );
       // 激活记录时的激活标签（失效文件是 error 标签，仍可激活展示错误与路径）。
       const target = session.activePath
@@ -142,7 +142,7 @@ export function HomePage() {
         <header className="workspace-heading">
           <h1>{view === "recent" ? "最近文档" : categories.find(item => item.id === category)?.name}</h1>
           <button type="button" className="primary-button" onClick={() => void handleOpen()}>
-            <FilePlus2 size={18} aria-hidden />打开 PDF
+            <FilePlus2 size={18} aria-hidden />打开文档
           </button>
         </header>
         {openError && <p className="home-error" role="alert">打开文件出错：{openError}</p>}

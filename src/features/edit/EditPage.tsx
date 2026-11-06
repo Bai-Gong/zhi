@@ -20,6 +20,7 @@ import {
   type EditObject,
 } from "../../core/document";
 import { saveEditedCopy } from "../../core/document/editExport";
+import { documentFormatOf } from "../../core/document/officeDocument";
 import { buildViewerUrl } from "../../shell/routes";
 import { PageEditor } from "./PageEditor";
 import { PropertiesPanel } from "./PropertiesPanel";
@@ -54,7 +55,7 @@ export function EditPage() {
 
   // 装载：路径参数驱动；同路径标签已就绪则跳过（从查看器进入零重载）。
   useEffect(() => {
-    if (!path) return;
+    if (!path || documentFormatOf(path) !== "pdf") return;
     const current = activeTabOf(useDocumentStore.getState());
     if (current.status === "ready" && current.sourcePath === path) return;
     void openDocument(path);
@@ -62,7 +63,7 @@ export function EditPage() {
 
   // 编辑会话：就绪后确保存在（文档重开 → 代际不符 → 自动重建，旧对象作废）。
   useEffect(() => {
-    if (status !== "ready" || !activeTabId) return;
+    if (status !== "ready" || !activeTabId || tab.sourceFormat !== "pdf") return;
     useEditStore.getState().ensureSession(activeTabId, loadGeneration);
   }, [status, activeTabId, loadGeneration]);
 
@@ -274,6 +275,11 @@ export function EditPage() {
   const handleObjectCreated = useCallback(() => {
     showToast("已进入文本编辑：在右侧属性面板修改内容与样式。");
   }, [showToast]);
+
+  if ((path && documentFormatOf(path) !== "pdf") || (!path && tab.sourceFormat !== "pdf")) {
+    return <div className="viewer-state"><p>Office 文档需要先导出为 PDF，再编辑或整理页面。</p>
+      <button type="button" onClick={() => navigate(buildViewerUrl(path ?? tab.sourcePath ?? undefined))}>返回阅读并导出 PDF</button></div>;
+  }
 
   return (
     <div className="edit-page">

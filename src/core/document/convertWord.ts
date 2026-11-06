@@ -1,3 +1,4 @@
+import { validateOfficeBytes } from "./officeValidation";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import * as mammoth from "mammoth";
 import { readSourceBytes } from "./highlightExport";
@@ -169,6 +170,7 @@ export async function inspectDocxFile(path: string): Promise<DocxFileSummary> {
   } catch (error) {
     throw new Error(`读取文件失败：${describeError(error)}`);
   }
+  validateOfficeBytes(bytes, "docx");
   if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
     throw new Error("不是有效的 Word 文档（.docx）：旧版 .doc 格式不支持，请在 Word 中另存为 .docx。");
   }
@@ -205,6 +207,8 @@ export async function runWordToPdf(
   } catch (error) {
     throw new Error(`读取「${file.fileName}」失败：${describeError(error)}`);
   }
+  validateOfficeBytes(bytes, "docx");
+  throwIfCancelled(control);
   // 页面设置与 mammoth 共用同一份字节（两者都只读，互不影响）。
   const setup: DocxPageSetup | null = await parseDocxPageSetup(bytes);
   const base = setup ?? FALLBACK_DOCX_PAGE_SETUP;
@@ -234,6 +238,10 @@ export async function runWordToPdf(
       `解析 Word 文档失败：${describeError(error)}（仅支持 .docx；文件可能已损坏或是旧版 .doc）`,
     );
   }
+  throwIfCancelled(control);
+  const sanitized = sanitizeWordHtml(html);
+  html = sanitized.html;
+  ignoredCount += sanitized.removed;
   if (html.replace(/<[^>]+>/g, "").trim().length === 0 && !html.includes("<img")) {
     throw new Error("该 Word 文档没有可转换的内容。");
   }
@@ -251,4 +259,22 @@ export async function runWordToPdf(
     floatsStripped: pre.floatsStripped,
     pageSetup: { geometry, fromDocument: setup !== null },
   };
+}
+
+/** Parse in an inert template before insertion: document links/images never fetch remote resources. */
+export function sanitizeWordHtml(html: string): { html: string; removed: number } {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  let removed = 0;
+  const allowed = new Set(["P", "DIV", "SPAN", "H1", "H2", "H3", "H4", "H5", "H6", "B", "STRONG", "I", "EM", "U", "S", "DEL", "SUP", "SUB", "BR", "HR", "UL", "OL", "LI", "TABLE", "THEAD", "TBODY", "TFOOT", "TR", "TD", "TH", "IMG", "A", "BLOCKQUOTE", "PRE", "CODE"]);
+  for (const element of Array.from(template.content.querySelectorAll("*"))) {
+    if (!allowed.has(element.tagName)) { element.remove(); removed++; continue; }
+    for (const attr of Array.from(element.attributes)) {
+      if (!["src", "alt", "colspan", "rowspan"].includes(attr.name) || (attr.name === "src" && element.tagName !== "IMG")) element.removeAttribute(attr.name);
+    }
+    if (element.tagName === "IMG" && !/^data:image\/(png|jpeg|gif|webp);base64,/i.test(element.getAttribute("src") ?? "")) {
+      element.replaceWith(document.createTextNode(element.getAttribute("alt") || "[不支持的图片]")); removed++;
+    }
+  }
+  return { html: template.innerHTML, removed };
 }

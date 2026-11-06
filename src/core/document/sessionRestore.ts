@@ -18,6 +18,7 @@
 // 副作用与 shell/uiStore 同款「模块加载即启动」：App 静态导入 HomePage →
 // 本模块必然加载，订阅随模块缓存只装一次（StrictMode 双渲染安全）。
 import { useDocumentStore, activeTabOf } from "./store";
+import type { OfficeConversionOptions } from "./officeDocument";
 
 /** 会话恢复持久化键（与 zhi.recentFiles / zhi.uiPrefs 互不冲突）。 */
 const STORAGE_KEY = "zhi.lastSession";
@@ -26,6 +27,8 @@ const PERSIST_DEBOUNCE_MS = 800;
 
 /** 单个标签的恢复快照（纯数据）。 */
 export interface SessionTabSnapshot {
+  /** Lightweight reader preferences only; never persist converted bytes. */
+  officeOptions?: OfficeConversionOptions;
   /** 打开时的本地绝对路径（恢复时按它重新装载）。 */
   path: string;
   /** 1 起页码。 */
@@ -47,7 +50,9 @@ function snapshotOf(state: ReturnType<typeof useDocumentStore.getState>): Sessio
   const tabs: SessionTabSnapshot[] = [];
   for (const tab of state.tabs) {
     if (!tab.sourcePath) continue; // 防御：无路径的标签无法恢复
-    tabs.push({ path: tab.sourcePath, page: tab.currentPage, scale: tab.scale });
+    tabs.push({ path: tab.sourcePath, page: tab.currentPage, scale: tab.scale,
+      ...(tab.sourceFormat !== "pdf" ? { officeOptions: tab.officeOptions } : {}),
+    });
   }
   if (tabs.length === 0) return null;
   return { tabs, activePath: activeTabOf(state).sourcePath ?? null };
@@ -67,6 +72,16 @@ function persistSnapshot(snapshot: SessionSnapshot | null): void {
   }
 }
 
+function parseOfficeOptions(value: unknown): OfficeConversionOptions | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Record<string, unknown>;
+  const options: OfficeConversionOptions = {};
+  if (candidate.encoding === "utf-8" || candidate.encoding === "gb18030") options.encoding = candidate.encoding;
+  if (typeof candidate.includeHidden === "boolean") options.includeHidden = candidate.includeHidden;
+  if (Array.isArray(candidate.sheetNames) && candidate.sheetNames.length <= 10000 && candidate.sheetNames.every(n => typeof n === "string" && n.length <= 255)) options.sheetNames = candidate.sheetNames;
+  return options;
+}
+
 function parseSnapshot(raw: string | null): SessionSnapshot | null {
   if (!raw) return null;
   try {
@@ -84,6 +99,7 @@ function parseSnapshot(raw: string | null): SessionSnapshot | null {
         path: tab.path,
         page: typeof tab.page === "number" && Number.isFinite(tab.page) ? tab.page : 1,
         scale: typeof tab.scale === "number" && Number.isFinite(tab.scale) ? tab.scale : 1,
+        officeOptions: parseOfficeOptions(tab.officeOptions),
       });
     }
     if (tabs.length === 0) return null;
@@ -139,7 +155,7 @@ useDocumentStore.subscribe((state, prev) => {
   }
   // 页码/缩放变化（翻页滚动/Ctrl+滚轮缩放）：高频，debounce 写入不阻塞交互。
   const positional = state.tabs.some(
-    (t, i) => t.currentPage !== prev.tabs[i]?.currentPage || t.scale !== prev.tabs[i]?.scale,
+    (t, i) => t.currentPage !== prev.tabs[i]?.currentPage || t.scale !== prev.tabs[i]?.scale || t.officeOptions !== prev.tabs[i]?.officeOptions,
   );
   if (positional) {
     cancelDebounce();

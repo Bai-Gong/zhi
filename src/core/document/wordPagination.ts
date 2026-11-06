@@ -143,7 +143,9 @@ export async function paginateWordHtml(
   control: ConvertControl,
   ignoredCount: number,
 ): Promise<{ bytes: Uint8Array } & WordToPdfMeasure> {
+  throwIfCancelled(control);
   const g = options.geometry;
+  if (g.widthPt > 4096 || g.heightPt > 4096 || g.widthPt <= 0 || g.heightPt <= 0) throw new Error("文档页面尺寸超出支持范围。");
   const contentW = Math.max(120, g.widthPt - g.marginLeftPt - g.marginRightPt);
   const contentH = Math.max(120, g.heightPt - g.marginTopPt - g.marginBottomPt);
 
@@ -153,7 +155,7 @@ export async function paginateWordHtml(
   const style = document.createElement("style");
   style.textContent = HOST_CSS;
   const content = document.createElement("div");
-  content.innerHTML = html; // mammoth 产物为受控 HTML（内置标签白名单），非用户任意标记
+  content.innerHTML = html; // convertWord 已在惰性 template 中移除外部资源和活动内容
   host.append(style, content);
   document.body.appendChild(host);
   try {
@@ -171,6 +173,7 @@ export async function paginateWordHtml(
       slices.push({ top: y, height: cut - y });
       y = cut;
     }
+    if (slices.length > 500) throw new Error("文档超过 500 页，请拆分后重试。");
     // 末尾碎片段（纯余量）并入上一页。
     if (slices.length > 1 && slices[slices.length - 1].height < TAIL_EPSILON_PX) slices.pop();
 

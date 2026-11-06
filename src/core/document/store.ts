@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { DocumentFormat } from "./officeValidation";
+import type { OfficeConversionOptions } from "./officeDocument";
 
 export type DocumentStatus = "idle" | "loading" | "ready" | "error";
 
@@ -25,6 +27,10 @@ export interface OutlineNode {
 
 /** 装载完成时由 openDocument 汇总的文档元数据。 */
 export interface DocumentMeta {
+  sourceFormat?: DocumentFormat;
+  officeOptions?: OfficeConversionOptions;
+  conversionWarnings?: string[];
+  generatedPdfBytes?: Uint8Array | null;
   document: PDFDocumentProxy;
   numPages: number;
   /** 与页码一一对应（下标 0 = 第 1 页）。 */
@@ -86,6 +92,12 @@ export interface TabSession {
   id: string;
   status: DocumentStatus;
   document: PDFDocumentProxy | null;
+  sourceFormat: DocumentFormat;
+  officeOptions: OfficeConversionOptions;
+  conversionWarnings: string[];
+  generatedPdfBytes: Uint8Array | null;
+  loadingStage: string | null;
+  loadingProgress: number | null;
   /** 打开时的本地绝对路径（/viewer?path= 传入）。 */
   sourcePath: string | null;
   fileName: string | null;
@@ -128,7 +140,7 @@ export interface DocumentStoreState {
    * （保留标签 id、递增其 loadGeneration），避免不可见的重复标签泄漏文档。
    * 返回标签 id。标签上限检查归 openDocument（需要区分新建/重开）。
    */
-  beginLoadTab: (path: string, fileName: string) => string;
+  beginLoadTab: (path: string, fileName: string, sourceFormat?: DocumentFormat, officeOptions?: OfficeConversionOptions) => string;
   /** 激活一个标签（保留其页码/缩放/高亮等会话状态）。 */
   activateTab: (id: string) => void;
   /**
@@ -140,6 +152,7 @@ export interface DocumentStoreState {
   moveTab: (id: string, targetIndex: number) => void;
   /** 装载成功：写入元数据并回到第 1 页（M1 重开语义保持）。 */
   readyTab: (id: string, meta: DocumentMeta) => void;
+  setLoadingStage: (id: string, message: string, progress: number | null) => void;
   /** 装载失败：该标签置错误态（复位会话数据，但保留 loadGeneration 与 sourcePath/fileName）。 */
   failTab: (id: string, message: string) => void;
   /**
@@ -180,6 +193,12 @@ function blankTab(id: string): TabSession {
     id,
     status: "idle",
     document: null,
+    sourceFormat: "pdf",
+    officeOptions: {},
+    conversionWarnings: [],
+    generatedPdfBytes: null,
+    loadingStage: null,
+    loadingProgress: null,
     sourcePath: null,
     fileName: null,
     numPages: 0,
@@ -228,7 +247,7 @@ export const useDocumentStore = create<DocumentStoreState>((set, get) => ({
   activeTabId: null,
   openRejection: null,
 
-  beginLoadTab: (path, fileName) => {
+  beginLoadTab: (path, fileName, sourceFormat = "pdf", officeOptions = {}) => {
     const existing = get().tabs.find((t) => t.sourcePath === path);
     const id = existing?.id ?? makeTabId();
     set((s) => ({
@@ -243,10 +262,12 @@ export const useDocumentStore = create<DocumentStoreState>((set, get) => ({
                   status: "loading" as DocumentStatus,
                   sourcePath: path,
                   fileName,
+                  sourceFormat,
+                  officeOptions,
                 }
               : t,
           )
-        : [...s.tabs, { ...blankTab(id), loadGeneration: 1, status: "loading" as DocumentStatus, sourcePath: path, fileName }],
+        : [...s.tabs, { ...blankTab(id), loadGeneration: 1, status: "loading" as DocumentStatus, sourcePath: path, fileName, sourceFormat, officeOptions }],
     }));
     return id;
   },
@@ -266,11 +287,21 @@ export const useDocumentStore = create<DocumentStoreState>((set, get) => ({
       return { tabs }; // 纯数据重排：activeTabId 与各标签会话字段原样保留
     }),
 
+  setLoadingStage: (id, message, progress) => set((s) => ({
+    tabs: patchTab(s, id, () => ({ loadingStage: message, loadingProgress: progress })),
+  })),
+
   readyTab: (id, meta) =>
     set((s) => ({
       tabs: patchTab(s, id, () => ({
         status: "ready" as DocumentStatus,
         document: meta.document,
+        sourceFormat: meta.sourceFormat ?? "pdf",
+        officeOptions: meta.officeOptions ?? {},
+        conversionWarnings: meta.conversionWarnings ?? [],
+        generatedPdfBytes: meta.generatedPdfBytes ?? null,
+        loadingStage: null,
+        loadingProgress: null,
         numPages: meta.numPages,
         pageSizes: meta.pageSizes,
         outline: meta.outline,
@@ -289,6 +320,8 @@ export const useDocumentStore = create<DocumentStoreState>((set, get) => ({
         // 寻址既有标签，清空后重试同一损坏/加密文件会认不出错误标签而每次另开
         // 新标签，反复重试顶满 MAX_TABS（违背「同一路径原地重开」语义）。
         sourcePath: t.sourcePath,
+        sourceFormat: t.sourceFormat,
+        officeOptions: t.officeOptions,
         fileName: t.fileName,
         status: "error" as DocumentStatus,
         error: message,
@@ -329,7 +362,7 @@ export const useDocumentStore = create<DocumentStoreState>((set, get) => ({
   addHighlight: (input) => {
     const s = get();
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
-    if (!tab || tab.status !== "ready" || tab.numPages <= 0 || input.rects.length === 0) return null;
+    if (!tab || tab.sourceFormat !== "pdf" || tab.status !== "ready" || tab.numPages <= 0 || input.rects.length === 0) return null;
     const pageNumber = Math.min(tab.numPages, Math.max(1, Math.round(input.pageNumber)));
     const highlight: Highlight = {
       id: input.id ?? makeHighlightId(),

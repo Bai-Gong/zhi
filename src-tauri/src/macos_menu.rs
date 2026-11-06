@@ -17,7 +17,7 @@ pub fn install(app: &App) -> tauri::Result<()> {
         &Native::quit(app, Some("退出百工·纸"))?,
     ])?;
     let file = Submenu::with_items(app, "文件", true, &[
-        &MenuItem::with_id(app, "open", "打开 PDF…", true, Some("Cmd+O"))?,
+        &MenuItem::with_id(app, "open", "打开文档…", true, Some("Cmd+O"))?,
         &Native::separator(app)?,
         &Native::close_window(app, Some("关闭窗口"))?,
     ])?;
@@ -34,6 +34,7 @@ pub fn install(app: &App) -> tauri::Result<()> {
     for (id, label) in [
         ("merge", "合并 PDF…"), ("split", "拆分 PDF…"),
         ("pdf-to-word", "PDF 转 Word…"), ("word-to-pdf", "Word 转 PDF…"),
+        ("spreadsheet-to-pdf", "Excel/CSV 转 PDF…"), ("presentation-to-pdf", "PPT 转 PDF…"),
         ("pdf-to-images", "PDF 转图片…"), ("images-to-pdf", "图片转 PDF…"),
     ] {
         tools.append(&MenuItem::with_id(app, id, label, true, None::<&str>)?)?;

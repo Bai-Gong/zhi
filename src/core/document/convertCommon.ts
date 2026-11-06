@@ -1,7 +1,7 @@
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { initPdfjs, pdfjsLib, createDocumentWorker, InvalidPDFException, PasswordException } from "./pdfjs";
+import { PDF_IMAGE_OPTIONS, initPdfjs, pdfjsLib, createDocumentWorker, InvalidPDFException, PasswordException } from "./pdfjs";
 import { readSourceBytes, sameDiskPath } from "./highlightExport";
 
 /**
@@ -61,7 +61,7 @@ export async function withStandalonePdf<T>(
   const worker = createDocumentWorker();
   // port 引用创建后立即取走（destroy 后取不到，见 openDocument 的 LoadEntry 注释）。
   const port = worker.port;
-  const task = pdfjsLib.getDocument({ data: bytes, worker });
+  const task = pdfjsLib.getDocument({ ...PDF_IMAGE_OPTIONS, data: bytes, worker });
   // 统一回收：先 task.destroy() 落地（终止 worker 侧解析），再 terminate 线程。
   const release = () => {
     try {

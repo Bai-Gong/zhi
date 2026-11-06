@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+import * as XLSX from 'xlsx';
+const source = fs.readFileSync(new URL('../src/core/document/convertSpreadsheet.ts', import.meta.url), 'utf8');
+const exports = {};
+vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, {
+  exports, TextDecoder, require: name => name === 'xlsx' ? XLSX : name === './officeValidation' ? { validateOfficeBytes() {} } : {},
+});
+const { parseSpreadsheet, spreadsheetRowGroups } = exports;
+const csv = parseSpreadsheet(new TextEncoder().encode('\ufeff标题,备注\r\n"你好,世界","跨\n行"\r\n001,值'), '中文.csv');
+const csvRows = XLSX.utils.sheet_to_json(csv.Sheets[csv.SheetNames[0]], { header: 1 });
+assert.equal(csvRows[1][0], '你好,世界'); assert.equal(csvRows[1][1], '跨\n行'); assert.equal(csvRows[2][0], '001');
+const gb = parseSpreadsheet(new Uint8Array([0xd6, 0xd0, 0xce, 0xc4, 0x2c, 0x31]), '中文.csv', 'gb18030');
+assert.equal(gb.Sheets[gb.SheetNames[0]].A1.v, '中文');
+const book = XLSX.utils.book_new();
+const sheet = XLSX.utils.aoa_to_sheet([['标题', '金额'], ['中文', 123.45], ['合并', null], [null, null]]);
+sheet.B2.z = '0.00'; sheet.B3 = { t:'n', f:'B2*2', v:246.9 }; sheet.B4 = {t:'n', f:'B2*3'};
+sheet['!merges'] = [{s:{r:2,c:0},e:{r:3,c:0}}];
+XLSX.utils.book_append_sheet(book, sheet, '可见'); XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['隐藏']]), '隐藏');
+book.Workbook = { Sheets: [{ name:'可见', Hidden:0 }, {name:'隐藏',Hidden:1}] };
+const parsed = parseSpreadsheet(new Uint8Array(XLSX.write(book, {type:'array',bookType:'xlsx'})), 'test.xlsx');
+assert.equal(parsed.SheetNames.length, 2); assert.equal(parsed.Workbook.Sheets[1].Hidden, 1);
+assert.equal(parsed.Sheets['可见'].B3.f, 'B2*2'); assert.equal(parsed.Sheets['可见'].B3.v, 246.9);
+assert.equal(XLSX.utils.format_cell(parsed.Sheets['可见'].B2), '123.45');
+assert.equal(parsed.Sheets['可见']['!merges'][0].e.r, 3);
+assert.deepEqual(JSON.parse(JSON.stringify(spreadsheetRowGroups(0, 5, [{s:{r:1,c:0},e:{r:3,c:0}},{s:{r:3,c:1},e:{r:4,c:1}}]))), [{start:0,end:0},{start:1,end:4},{start:5,end:5}]);
+assert.throws(() => parseSpreadsheet(new Uint8Array([1,2,3]), 'bad.xlsx'), /XLSX/);
+assert.throws(() => parseSpreadsheet(new Uint8Array(33 * 1024 * 1024), 'big.csv'), /32 MB/);
+assert.throws(() => parseSpreadsheet(new TextEncoder().encode(Array(10002).fill('row').join('\n')), 'big.csv'), /范围过大/);
+console.log('Spreadsheet parser checks passed: Unicode/CSV quoting/GB18030/formats/hidden sheets/formulas/merges/resource limits.');

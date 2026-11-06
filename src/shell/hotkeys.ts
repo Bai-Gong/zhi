@@ -15,7 +15,7 @@
 //   （Ctrl+C/V/A/S 等用户习惯不劫持）；
 // - 焦点在输入框（input/textarea/select/contenteditable）时不触发——与查看器滚动
 //   容器键盘翻页同款判据，杜绝吞掉用户输入。
-import { activeTabOf, closeDocument, openDocument, openDocumentsBatch, pickPdfFiles, useDocumentStore } from "../core/document";
+import { activeTabOf, closeDocument, openDocument, openDocumentsBatch, pickDocumentFiles, useDocumentStore } from "../core/document";
 import { buildViewerUrl } from "./routes";
 import { useUiStore } from "./uiStore";
 // 缩放档位/夹取是查看器域的唯一事实来源（pageGeometry，零依赖纯函数）。shell 反向
@@ -34,7 +34,7 @@ export interface HotkeyEntry {
 }
 
 export const HOTKEY_LIST: readonly HotkeyEntry[] = [
-  { combo: "Ctrl+O", label: "打开 PDF 文件（对话框可多选）" },
+  { combo: "Ctrl+O", label: "打开文档 文件（对话框可多选）" },
   { combo: "Ctrl+W / Ctrl+F4", label: "关闭当前标签" },
   { combo: "Ctrl+Tab", label: "切换到下一个标签（循环）" },
   { combo: "Ctrl+Shift+Tab", label: "切换到上一个标签（循环）" },
@@ -61,7 +61,7 @@ export const HOTKEY_LIST: readonly HotkeyEntry[] = [
 export async function openPickedPdf(navigate: HotkeyNavigator): Promise<void> {
   let paths: string[] | null;
   try {
-    paths = await pickPdfFiles(); // 用户取消返回 null；对话框异常在这里吸收
+    paths = await pickDocumentFiles(); // 用户取消返回 null；对话框异常在这里吸收
   } catch (error) {
     console.warn("打开文件对话框调用失败：", error);
     return;
@@ -70,7 +70,8 @@ export async function openPickedPdf(navigate: HotkeyNavigator): Promise<void> {
   if (paths.length === 1) {
     const path = paths[0];
     if (path === activeTabOf(useDocumentStore.getState()).sourcePath) {
-      void openDocument(path); // 同一路径不改变查询参数，直接重开刷新该标签会话
+      navigate(buildViewerUrl());
+      void openDocument(path).then(() => syncViewerRouteToActiveTab(navigate));
     } else {
       navigate(buildViewerUrl(path));
     }
@@ -126,6 +127,7 @@ export function closeTabsAndSyncRoute(tabIds: readonly string[], navigate: Hotke
 
 /** Ctrl+F：打开搜索面板（挂载即 autoFocus 聚焦输入框），已打开则聚焦并全选关键词。 */
 function focusSearchPanel(): void {
+  if (activeTabOf(useDocumentStore.getState()).sourceFormat !== "pdf") return;
   const ui = useUiStore.getState();
   if (!ui.searchPanelOpen) {
     ui.setSearchPanelOpen(true);

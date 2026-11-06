@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Download,
   ChevronDown,
   ChevronUp,
   Contrast,
@@ -26,7 +27,9 @@ import {
 import { IconButton } from "../../components/IconButton";
 import { useDocumentStore, activeTabOf } from "../../core/document/store";
 import { HOTKEY_LIST, closeTabAndSyncRoute, openPickedPdf } from "../../shell/hotkeys";
-import { buildEditUrl, buildOrganizeUrl } from "../../shell/routes";
+import { buildEditUrl, buildOrganizeUrl, buildViewerUrl, buildToolWizardUrl } from "../../shell/routes";
+import { saveConvertedFile } from "../../core/document/convertCommon";
+import { openDocument } from "../../core/document/openDocument";
 import { useUiStore } from "../../shell/uiStore";
 import { clampScale, ZOOM_STEP } from "./pageGeometry";
 import { clearAutoFit, requestFitWidth } from "./scrollBridge";
@@ -100,19 +103,38 @@ export function ViewerToolbar() {
   }, [helpOpen]);
 
   const hasDocument = numPages > 0;
+  const isOffice = tab.sourceFormat !== "pdf";
+  const [saving, setSaving] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [savedPath, setSavedPath] = useState<string | null>(null);
+  useEffect(() => { setExportMessage(null); setSavedPath(null); }, [tab.id, tab.loadGeneration]);
+  const exportPdf = async () => {
+    if (!tab.generatedPdfBytes || !sourcePath || saving) return;
+    const tabId = tab.id;
+    const generation = tab.loadGeneration;
+    setSaving(true);
+    try {
+      const result = await saveConvertedFile({ bytes: tab.generatedPdfBytes, sourcePaths: [sourcePath],
+        defaultName: `${(fileName ?? "文档").replace(/\.[^.]+$/, "")}.pdf`, filterName: "PDF", extensions: ["pdf"] });
+      const active = activeTabOf(useDocumentStore.getState());
+      if (active.id !== tabId || active.loadGeneration !== generation) return;
+      if (result.status === "saved") { setExportMessage("PDF 已保存。"); setSavedPath(result.path); }
+      else if (result.status === "failed") setExportMessage(result.message);
+    } finally { setSaving(false); }
+  };
 
   /** 查看器内「打开」（技术方案 5.1）：与 Ctrl+O / 标签条「+」共用同一实现。 */
   const handleOpen = useCallback(() => void openPickedPdf(navigate), [navigate]);
 
   /** 进入组织模式（M3）：对当前激活标签的文档开组织视图（同路径已就绪，组织页不重载）。 */
   const handleOrganize = useCallback(() => {
-    if (sourcePath) navigate(buildOrganizeUrl(sourcePath));
-  }, [navigate, sourcePath]);
+    if (sourcePath && tab.sourceFormat === "pdf") navigate(buildOrganizeUrl(sourcePath));
+  }, [navigate, sourcePath, tab.sourceFormat]);
 
   /** 进入编辑模式（M5）：对当前激活标签的文档开编辑视图（同路径已就绪，编辑页不重载）。 */
   const handleEdit = useCallback(() => {
-    if (sourcePath) navigate(buildEditUrl(sourcePath));
-  }, [navigate, sourcePath]);
+    if (sourcePath && tab.sourceFormat === "pdf") navigate(buildEditUrl(sourcePath));
+  }, [navigate, sourcePath, tab.sourceFormat]);
 
   /**
    * 关闭当前（激活）标签：取消其渲染、销毁其 pdf.js 文档后从 store 摘除；
@@ -144,22 +166,24 @@ export function ViewerToolbar() {
   };
 
   return (
+    <>
     <div className="viewer-toolbar fang-glass-surface" role="toolbar" aria-label="查看器工具栏">
       <div className="toolbar-group">
-        <IconButton icon={FolderOpen} label="打开 PDF 文件（Ctrl+O）" onClick={handleOpen} />
-        <IconButton icon={FileX} label="关闭文档（Ctrl+W）" disabled={!hasDocument} onClick={handleClose} />
+        <IconButton icon={FolderOpen} label="打开文档（Ctrl+O）" onClick={handleOpen} />
+        <IconButton icon={FileX} label="关闭文档（Ctrl+W）" disabled={!tab.sourcePath} onClick={handleClose} />
         <IconButton
           icon={LayoutGrid}
-          label="组织页面（旋转/删除/重排/提取）"
-          disabled={!hasDocument}
+          label={isOffice ? "请先导出 PDF 再整理页面" : "组织页面（旋转/删除/重排/提取）"}
+          disabled={!hasDocument || isOffice}
           onClick={handleOrganize}
         />
         <IconButton
           icon={Pencil}
-          label="编辑内容（文本改写/图片增删改）"
-          disabled={!hasDocument}
+          label={isOffice ? "请先导出 PDF 再编辑" : "编辑内容（文本改写/图片增删改）"}
+          disabled={!hasDocument || isOffice}
           onClick={handleEdit}
         />
+        {isOffice && <IconButton icon={Download} label={saving ? "正在保存…" : "导出 PDF"} disabled={!hasDocument || saving} onClick={() => void exportPdf()} />}
         <IconButton icon={PanelLeft} label="折叠/展开侧栏" onClick={toggleSidebar} />
         {fileName && (
           <span className="viewer-toolbar-file" title={fileName}>
@@ -208,7 +232,7 @@ export function ViewerToolbar() {
         <IconButton
           icon={Search}
           label={searchPanelOpen ? "收起搜索面板（Ctrl+F）" : "全文搜索（Ctrl+F）"}
-          disabled={!hasDocument}
+          disabled={!hasDocument || isOffice}
           aria-pressed={searchPanelOpen}
           onClick={toggleSearchPanel}
         />
@@ -268,5 +292,11 @@ export function ViewerToolbar() {
         </div>
       )}
     </div>
+    {isOffice && hasDocument && <div className="office-actions">
+        {isOffice && hasDocument && tab.sourceFormat !== "docx" && <button type="button" onClick={() => navigate(`${buildToolWizardUrl(tab.sourceFormat === "pptx" ? "presentation-to-pdf" : "spreadsheet-to-pdf")}?path=${encodeURIComponent(sourcePath ?? "")}`)}>转换设置</button>}
+        {tab.sourceFormat === "csv" && hasDocument && <select aria-label="CSV 编码" value={tab.officeOptions.encoding ?? "utf-8"} onChange={event => { const encoding = event.target.value as "utf-8" | "gb18030"; if (sourcePath) void openDocument(sourcePath, { encoding }); }}><option value="utf-8">UTF-8</option><option value="gb18030">GB18030</option></select>}
+        {exportMessage && <span role="status">{exportMessage}{savedPath && <button type="button" onClick={() => navigate(buildViewerUrl(savedPath))}>打开 PDF</button>}</span>}
+    </div>}
+    </>
   );
 }

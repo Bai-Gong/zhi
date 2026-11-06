@@ -69,7 +69,7 @@ export function RecentFileList({ onOpen, onOrganize }: RecentFileListProps) {
     <section className="home-section" aria-label="最近文件">
       <div className="recent-heading"><h2 className="home-section-title">最近文件</h2>{files.length > 0 && <div className="recent-controls"><input aria-label="搜索最近文件" placeholder="查找文件名…" value={query} onChange={event => setQuery(event.target.value)} /><select aria-label="文件排序" value={sort} onChange={event => setSort(event.target.value)}><option value="recent">最近打开</option><option value="name">文件名称</option></select></div>}</div>
       {files.length === 0 ? (
-        <div className="home-empty recent-empty"><FileText size={28} /><div><strong>暂无最近文档</strong><p>点击右上角「打开 PDF」选择文件。</p></div></div>
+        <div className="home-empty recent-empty"><FileText size={28} /><div><strong>暂无最近文档</strong><p>点击右上角「打开文档」选择文件。</p></div></div>
       ) : (
         <ul className="recent-list">
           {visibleFiles.length === 0 && <li className="home-empty">没有匹配的文件。</li>}
@@ -95,7 +95,7 @@ export function RecentFileList({ onOpen, onOrganize }: RecentFileListProps) {
                   <span className="recent-name">{file.fileName}</span>
                   <span className="recent-pages">{meta}</span>
                 </button>
-                {!missing && <IconButton icon={LayoutGrid} label={`整理 ${file.fileName} 的页面`} onClick={() => onOrganize(file.path)} />}
+                {!missing && /\.pdf$/i.test(file.path) && <IconButton icon={LayoutGrid} label={`整理 ${file.fileName} 的页面`} onClick={() => onOrganize(file.path)} />}
                 <IconButton icon={X} label="从最近文件移除" onClick={() => handleRemove(file.path)} />
               </li>
             );

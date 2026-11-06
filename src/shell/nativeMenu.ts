@@ -20,7 +20,7 @@ export function installNativeMenu(navigate: HotkeyNavigator): () => void {
     let route: string | undefined;
     if (payload === "home") route = ROUTES.home;
     else if (payload === "viewer") route = ROUTES.viewer;
-    else if (["merge", "split", "pdf-to-word", "word-to-pdf", "pdf-to-images", "images-to-pdf"].includes(payload)) {
+    else if (["merge", "split", "pdf-to-word", "word-to-pdf", "spreadsheet-to-pdf", "presentation-to-pdf", "pdf-to-images", "images-to-pdf"].includes(payload)) {
       route = buildToolWizardUrl(payload);
     }
     if (route) {

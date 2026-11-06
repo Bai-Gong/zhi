@@ -75,6 +75,7 @@ export function PageCanvas({ pageNumber, scale, distance }: PageCanvasProps) {
   // ===== 高亮/选区所需的会话字段（窄选择器：引用稳定，不随翻页等无关更新重渲染） =====
   const tabHighlights = useDocumentStore((s) => activeTabOf(s).highlights);
   const pageSize = useDocumentStore((s) => activeTabOf(s).pageSizes[pageNumber - 1]);
+  const isPdf = useDocumentStore((s) => activeTabOf(s).sourceFormat === "pdf");
   const isCurrentPage = useDocumentStore((s) => activeTabOf(s).currentPage === pageNumber);
   const loadGeneration = useDocumentStore((s) => activeTabOf(s).loadGeneration);
 
@@ -309,7 +310,7 @@ export function PageCanvas({ pageNumber, scale, distance }: PageCanvasProps) {
       )}
       {/* 「另存副本」浮动条固定在窗口右下角，只由「当前页」的画布挂载 → 全局恰一份。
           （当前页必在虚拟化挂载集合内；滚动跨页时在页间换实例，固定定位视觉不跳。） */}
-      {isCurrentPage && <HighlightSaveButton />}
+      {isCurrentPage && isPdf && <HighlightSaveButton />}
     </>
   );
 }

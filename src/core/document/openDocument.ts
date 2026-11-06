@@ -2,13 +2,14 @@ import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
-import { initPdfjs, pdfjsLib, createDocumentWorker, InvalidPDFException, PasswordException } from "./pdfjs";
+import { PDF_IMAGE_OPTIONS, initPdfjs, pdfjsLib, createDocumentWorker, InvalidPDFException, PasswordException } from "./pdfjs";
 import { useDocumentStore, activeTabOf, MAX_TABS, type PageSize } from "./store";
 import { readOutline } from "./outline";
 import { renderQueue } from "./renderQueue";
 import { addRecentFile } from "./recentFiles";
 import { clearOrganizeSession } from "./organizeStore";
 import { clearEditSession } from "./editStore";
+import { convertOfficeDocument, documentFormatOf, DOCUMENT_EXTENSIONS, type OfficeConversionOptions } from "./officeDocument";
 
 /**
  * 打开文件全流程（技术方案 5.1 / 2.3，M2-计划 D1 多标签模型）：
@@ -54,6 +55,23 @@ export async function pickPdfFiles(): Promise<string[] | null> {
   if (selected === null) return null;
   // multiple:true 时插件恒返回 string[]；Array.isArray 防御插件行为差异（单元素等）。
   return Array.isArray(selected) ? selected : [selected];
+}
+
+/** Office and PDF entry points; editing and page organization retain PDF-only pickers. */
+export async function pickDocumentFiles(): Promise<string[] | null> {
+  const selected = await openFileDialog({
+    multiple: true, directory: false,
+    filters: [{ name: "文档", extensions: DOCUMENT_EXTENSIONS }],
+  });
+  return selected === null ? null : Array.isArray(selected) ? selected : [selected];
+}
+
+export async function pickDocumentFile(): Promise<string | null> {
+  const selected = await openFileDialog({
+    multiple: false, directory: false,
+    filters: [{ name: "文档", extensions: DOCUMENT_EXTENSIONS }],
+  });
+  return typeof selected === "string" ? selected : null;
 }
 
 function fileNameOf(path: string): string {
@@ -169,7 +187,7 @@ async function startLoad(
   // port 引用在创建后立即取走：装载失败/文档销毁时靠它显式 terminate 线程
   //（v6 不会回收调用方传入的 worker，见 LoadEntry 注释），而 destroy 后取不到。
   const entry: LoadEntry = {
-    task: pdfjsLib.getDocument({ ...params, worker }),
+    task: pdfjsLib.getDocument({ ...PDF_IMAGE_OPTIONS, ...params, worker }),
     worker,
     port: worker.port,
   };
@@ -191,12 +209,6 @@ async function startLoad(
 /** 主路径：asset 协议 URL 流式装载（技术方案 2.3，零拷贝、支持大文件）。 */
 async function loadFromUrl(url: string, tabId: string): Promise<PDFDocumentProxy> {
   return startLoad({ url }, tabId);
-}
-
-/** 兜底路径：plugin-fs 读字节后装载（需 capabilities 的 fs:allow-read-file + "**" scope）。 */
-async function loadFromBytes(path: string, tabId: string): Promise<PDFDocumentProxy> {
-  const data = await readFile(path);
-  return startLoad({ data }, tabId);
 }
 
 /** 分批读取全部页尺寸（已按旋转归一为显示方向的宽高），批大小 8 防 worker 洪泛。 */
@@ -245,9 +257,15 @@ export interface OpenDocumentResult {
  * store.openRejection（横幅提示）；`tabId` 供调用方对**本标签**做后续回写
  * （如会话恢复的页码/缩放），不受装载期间激活位漂移影响。
  */
-export async function openDocument(path: string): Promise<OpenDocumentResult> {
+export async function openDocument(path: string, options?: OfficeConversionOptions): Promise<OpenDocumentResult> {
   if (!path) {
     const message = "未指定要打开的文件。";
+    useDocumentStore.getState().rejectOpen(message);
+    return { tabId: null, error: message };
+  }
+  const sourceFormat = documentFormatOf(path);
+  if (!sourceFormat) {
+    const message = "暂不支持此格式，请选择 PDF、DOCX、XLSX、PPTX 或 CSV 文件。";
     useDocumentStore.getState().rejectOpen(message);
     return { tabId: null, error: message };
   }
@@ -255,6 +273,8 @@ export async function openDocument(path: string): Promise<OpenDocumentResult> {
   const state = useDocumentStore.getState();
   // 同路径标签本轮重开（不受上限约束）；只有「新文件 + 已满」才被拒绝。
   const existing = state.tabs.find((t) => t.sourcePath === path);
+  const officeOptions: OfficeConversionOptions = { ...(options ?? existing?.officeOptions ?? {}) };
+  if (officeOptions.sheetNames) officeOptions.sheetNames = [...officeOptions.sheetNames];
   if (!existing && state.tabs.length >= MAX_TABS) {
     const message = `打开的文档标签已达上限（${MAX_TABS} 个），请先关闭部分标签再打开新文件。`;
     useDocumentStore.getState().rejectOpen(message);
@@ -270,7 +290,7 @@ export async function openDocument(path: string): Promise<OpenDocumentResult> {
   // activeTabId 变化重挂载并按新标签重新入队）。
   renderQueue.clear();
   // 先开启新会话（beginLoadTab 递增目标标签的 loadGeneration 使其旧结果立即过期）。
-  const tabId = useDocumentStore.getState().beginLoadTab(path, fileName);
+  const tabId = useDocumentStore.getState().beginLoadTab(path, fileName, sourceFormat, officeOptions);
   const generation = useDocumentStore.getState().tabs.find((t) => t.id === tabId)?.loadGeneration ?? 0;
   // 过期判定只看本标签：标签已被关闭、或被同一路径的更新一轮重开抢先。
   const isStale = () => {
@@ -287,21 +307,45 @@ export async function openDocument(path: string): Promise<OpenDocumentResult> {
     destroyDocument(previousDoc),
   ]);
 
+  if (isStale()) return { tabId, error: null };
   let doc: PDFDocumentProxy | null = null;
   let lastError: unknown = null;
   let lastErrorSource: "asset" | "fs" = "asset";
-  try {
-    doc = await loadFromUrl(convertFileSrc(path), tabId);
-  } catch (error) {
-    lastError = error;
-    console.warn("asset 协议装载失败，转文件系统兜底：", error);
-  }
-  if (!doc && !isStale()) {
+  let generatedPdfBytes: Uint8Array | null = null;
+  let conversionWarnings: string[] = [];
+  if (sourceFormat !== "pdf") {
     try {
-      doc = await loadFromBytes(path, tabId);
+      const result = await convertOfficeDocument({ path, fileName }, {
+        isCancelled: isStale,
+        onStage: (message, progress) => {
+          if (!isStale()) useDocumentStore.getState().setLoadingStage(tabId, message, progress);
+        },
+      }, officeOptions);
+      if (isStale()) return { tabId, error: null };
+      generatedPdfBytes = result.bytes;
+      conversionWarnings = result.warnings;
+      // pdf.js transfers its input buffer to the worker; retain an independent export copy.
+      doc = await startLoad({ data: result.bytes.slice() }, tabId);
     } catch (error) {
       lastError = error;
-      lastErrorSource = "fs";
+    }
+  } else {
+    try {
+      doc = await loadFromUrl(convertFileSrc(path), tabId);
+    } catch (error) {
+      lastError = error;
+      console.warn("asset 协议装载失败，转文件系统兜底：", error);
+    }
+    if (!doc && !isStale()) {
+      try {
+        const bytes = await readFile(path);
+        // Reading is asynchronous: a close/reopen must not create an orphan worker.
+        if (isStale()) return { tabId, error: null };
+        doc = await startLoad({ data: bytes }, tabId);
+      } catch (error) {
+        lastError = error;
+        lastErrorSource = "fs";
+      }
     }
   }
 
@@ -311,7 +355,8 @@ export async function openDocument(path: string): Promise<OpenDocumentResult> {
     return { tabId, error: null };
   }
   if (!doc) {
-    const message = describeError(lastError, lastErrorSource);
+    const message = sourceFormat === "pdf" ? describeError(lastError, lastErrorSource)
+      : lastError instanceof Error ? lastError.message : "Office 文档预览失败。";
     useDocumentStore.getState().failTab(tabId, message);
     return { tabId, error: message };
   }
@@ -327,11 +372,15 @@ export async function openDocument(path: string): Promise<OpenDocumentResult> {
     }
     useDocumentStore.getState().readyTab(tabId, {
       document: doc,
+      sourceFormat,
+      officeOptions,
+      generatedPdfBytes,
+      conversionWarnings,
       numPages: doc.numPages,
       pageSizes,
       outline,
     });
-    addRecentFile({ path, fileName, numPages: doc.numPages });
+    addRecentFile({ path, fileName, numPages: doc.numPages, sourceFormat });
     return { tabId, error: null };
   } catch (error) {
     void destroyDocument(doc);
@@ -347,6 +396,7 @@ export async function openDocument(path: string): Promise<OpenDocumentResult> {
 
 /** 批量打开时随路径携带的会话恢复信息（T7 会话恢复）：装载成功后回写页码/缩放。 */
 export interface BatchRestoreHint {
+  officeOptions?: OfficeConversionOptions;
   /** 1 起页码（超界由 setCurrentPage 按页数夹取）。 */
   page: number;
   /** 0.25–4.0（超界由 setScale 夹取）。 */
@@ -403,7 +453,7 @@ export async function openDocumentsBatch(
       failures.push(`${fileName}：标签已达上限（${MAX_TABS} 个）`);
       continue;
     }
-    const { tabId, error } = await openDocument(path);
+    const { tabId, error } = await openDocument(path, restores?.[i]?.officeOptions);
     if (error) {
       // 装载失败的文件已由 failTab 置「打开失败」标签（保留 sourcePath 可见可重试），
       // 这里只聚合文件名与原因进最终横幅。

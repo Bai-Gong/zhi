@@ -47,7 +47,7 @@ const TOOLS: ToolCard[] = [
   {
     id: "reader",
     title: "阅读查看",
-    description: "打开 PDF，阅读与查找内容",
+    description: "阅读 PDF、Word、Excel、PPT 和 CSV",
     icon: BookOpen,
     available: true,
   },
@@ -118,6 +118,8 @@ const TOOLS: ToolCard[] = [
     available: true,
     toolId: "word-to-pdf",
   },
+  { id: "spreadsheet-to-pdf", title: "Excel/CSV 转 PDF", description: "选择工作表，将表格分页导出为 PDF", icon: FileDown, available: true, toolId: "spreadsheet-to-pdf" },
+  { id: "presentation-to-pdf", title: "PPT 转 PDF", description: "将 PPTX 幻灯片逐页导出为 PDF", icon: FileDown, available: true, toolId: "presentation-to-pdf" },
   {
     id: "export",
     title: "导出另存",
@@ -148,7 +150,7 @@ export function ToolCards({
     return null;
   };
   const orderedTools = [...TOOLS].sort((a, b) => {
-    const order = ["merge", "split", "organize", "pdf-to-word", "word-to-pdf", "pdf-to-images", "images-to-pdf", "reader", "edit"];
+    const order = ["merge", "split", "organize", "pdf-to-word", "word-to-pdf", "spreadsheet-to-pdf", "presentation-to-pdf", "pdf-to-images", "images-to-pdf", "reader", "edit"];
     return order.indexOf(a.id) - order.indexOf(b.id);
   });
   const filtered = orderedTools.filter(tool => tool.available &&

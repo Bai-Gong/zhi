@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
@@ -68,8 +68,12 @@ function describeError(error: unknown): string {
 
 export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
   tool,
+  initialPath,
+  initialConfig,
 }: {
   tool: WizardToolDefinition<TConfig, TFileInfo>;
+  initialPath?: string;
+  initialConfig?: TConfig;
 }) {
   const navigate = useNavigate();
   const hasConfig = tool.config !== undefined;
@@ -81,12 +85,14 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
   // 配置状态归框架持有：回退/失败/取消一律不清空（验收「保留已选配置」）。
   // 无配置工具 TConfig 恒为 undefined（initial 缺省），run 拿到同样的 undefined。
   const [config, setConfig] = useState<TConfig>(() =>
-    tool.config ? tool.config.initial() : (undefined as TConfig),
+    tool.config ? (initialConfig ?? tool.config.initial()) : (undefined as TConfig),
   );
   const [configError, setConfigError] = useState<string | null>(null);
 
   // ===== 执行步状态 =====
   const cancelRef = useRef({ cancelled: false });
+  const mountedRef = useRef(true);
+  const initialLoadRef = useRef(0);
   const [runStatus, setRunStatus] = useState<"idle" | "running" | "failed" | "cancelled">("idle");
   const [progress, setProgress] = useState<WizardProgress>({ ratio: null, message: "准备执行…" });
   const [runError, setRunError] = useState<string | null>(null);
@@ -95,6 +101,33 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
   const outputRef = useRef<WizardOutput | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "done" | "failed">("idle");
   const [saveOutcome, setSaveOutcome] = useState<WizardSaveOutcome | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      cancelRef.current.cancelled = true;
+      outputRef.current = null;
+      initialLoadRef.current += 1;
+    };
+  }, []);
+
+  // Reader entry preloads only metadata, never starts conversion or saving.
+  useEffect(() => {
+    if (!initialPath) return;
+    const generation = ++initialLoadRef.current;
+    const entry: FileEntry<TFileInfo> = { path: initialPath, status: "loading" };
+    setFileEntries([entry]);
+    void tool.files.inspect(initialPath).then(info => {
+      if (!mountedRef.current || initialLoadRef.current !== generation) return;
+      setFileEntries([{ ...entry, status: "ready", info }]);
+      if (tool.config) setStep("配置");
+    }, error => {
+      if (!mountedRef.current || initialLoadRef.current !== generation) return;
+      setFileEntries([{ ...entry, status: "error", error: describeError(error) }]);
+    });
+    return () => { initialLoadRef.current += 1; };
+  }, [initialPath, tool]);
 
   const readyFiles = fileEntries.flatMap((entry) => (entry.status === "ready" && entry.info ? [entry.info] : []));
   const filesBusy = fileEntries.some((entry) => entry.status === "loading");
@@ -113,11 +146,12 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
         filters: tool.files.filters ?? [{ name: "PDF", extensions: ["pdf"] }],
       });
     } catch (error) {
-      setConfigError(`打开文件对话框失败：${describeError(error)}`);
+      if (mountedRef.current) setConfigError(`打开文件对话框失败：${describeError(error)}`);
       return;
     }
     const paths = (Array.isArray(picked) ? picked : picked ? [picked] : []).filter((p) => p.length > 0);
-    if (paths.length === 0) return;
+    if (!mountedRef.current || paths.length === 0) return;
+    initialLoadRef.current += 1;
     setConfigError(null);
     // 单文件工具（multiple=false）：新选择直接替换（minCount=1 的工具不该出现第二个文件）。
     const replacing = !tool.files.multiple;
@@ -131,14 +165,16 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
       void tool.files
         .inspect(entry.path)
         .then((info) => {
+          if (!mountedRef.current) return;
           setFileEntries((prev) =>
-            prev.map((item) => (item.path === entry.path ? { ...item, status: "ready", info, error: undefined } : item)),
+            prev.map((item) => (item === entry ? { ...item, status: "ready", info, error: undefined } : item)),
           );
         })
         .catch((error: unknown) => {
+          if (!mountedRef.current) return;
           setFileEntries((prev) =>
             prev.map((item) =>
-              item.path === entry.path ? { ...item, status: "error", error: describeError(error) } : item,
+              item === entry ? { ...item, status: "error", error: describeError(error) } : item,
             ),
           );
         });
@@ -146,6 +182,7 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
   }, [tool, fileEntries]);
 
   const removeFile = useCallback((path: string) => {
+    initialLoadRef.current += 1;
     setFileEntries((prev) => prev.filter((entry) => entry.path !== path));
   }, []);
 
@@ -192,22 +229,26 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
     setRunStatus("running");
     setRunError(null);
     setProgress({ ratio: null, message: "准备执行…" });
-    cancelRef.current = { cancelled: false };
+    const runToken = { cancelled: false };
+    cancelRef.current = runToken;
     try {
       const output = await tool.run({
         files: readyFiles,
         config,
-        onProgress: setProgress,
+        onProgress: next => { if (mountedRef.current && !runToken.cancelled) setProgress(next); },
         cancelToken: {
-          isCancelled: () => cancelRef.current.cancelled,
+          isCancelled: () => runToken.cancelled,
         },
       });
+      if (!mountedRef.current) return;
+      if (runToken.cancelled) { setRunStatus("cancelled"); return; }
       outputRef.current = output;
       setSaveState("idle");
       setSaveOutcome(null);
       setStep("导出");
     } catch (error) {
-      if (error instanceof WizardCancelled || cancelRef.current.cancelled) {
+      if (!mountedRef.current) return;
+      if (error instanceof WizardCancelled || runToken.cancelled) {
         setRunStatus("cancelled");
       } else {
         setRunStatus("failed");
@@ -239,9 +280,11 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
     setSaveState("saving");
     try {
       const outcome = await output.save();
+      if (!mountedRef.current) return;
       setSaveOutcome(outcome);
       setSaveState(outcome.status === "saved" ? "done" : outcome.status === "cancelled" ? "idle" : "failed");
     } catch (error) {
+      if (!mountedRef.current) return;
       setSaveOutcome({ status: "failed", message: describeError(error) });
       setSaveState("failed");
     }
@@ -452,8 +495,8 @@ export function ToolWizard<TConfig, TFileInfo extends WizardFileBase>({
               if (output.details && output.details.length > 0) {
                 body.push(
                   <ul key="details" className="wizard-export-list">
-                    {output.details.map((item) => (
-                      <li key={item.name}>
+                    {output.details.map((item, index) => (
+                      <li key={`${item.name}-${index}`}>
                         <span className="wizard-export-name">{item.name}</span>
                         <span className="wizard-export-note">{item.note}</span>
                       </li>

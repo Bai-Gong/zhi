@@ -6,6 +6,9 @@ import { imagesToPdfTool } from "./convert/imagesToPdfTool";
 import { pdfToWordTool } from "./convert/pdfToWordTool";
 import { wordToPdfTool } from "./convert/wordToPdfTool";
 
+import { spreadsheetToPdfTool } from "./convert/spreadsheetToPdfTool";
+import { presentationToPdfTool } from "./convert/presentationToPdfTool";
+
 /**
  * 工具向导注册表（M4，features/tools）：一份**数据文件**，不是框架代码。
  * 新工具（M6 起的格式转换等）= 写一份 WizardToolDefinition 加进本数组——
@@ -23,6 +26,8 @@ export const WIZARD_TOOLS: readonly WizardToolDefinition<any, any>[] = [
   imagesToPdfTool,
   pdfToWordTool,
   wordToPdfTool,
+  spreadsheetToPdfTool,
+  presentationToPdfTool,
 ];
 
 /** 按 id 找向导工具（路由 /tools/:toolId 用）；未注册返回 undefined。 */

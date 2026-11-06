@@ -7,6 +7,12 @@ import PdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker";
 // 方案 B（兜底）：worker 以 URL 形式交给 pdf.js 自行 new Worker。
 import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
+/** WebKit's worker ImageBitmap path can stall on large screenshot PDFs. Keep image
+ * decoding in the portable typed-array path there; page rasterization is unchanged. */
+export const PDF_IMAGE_OPTIONS = {
+  isOffscreenCanvasSupported: typeof navigator === "undefined" || !/Apple/.test(navigator.vendor),
+};
+
 let inited = false;
 
 /**

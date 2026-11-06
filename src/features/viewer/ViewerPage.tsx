@@ -388,6 +388,14 @@ export function ViewerPage() {
           </button>
         </div>
       )}
+      {tab.sourceFormat !== "pdf" && status === "ready" && (
+        <div className="office-notice" role="status">
+          <span>Office 基础版式预览 · 导出 PDF 后可编辑与整理页面；此预览不支持文字搜索。</span>
+          {tab.conversionWarnings.length > 0 && <details><summary>转换提示（{tab.conversionWarnings.length}）</summary>
+            <ul>{tab.conversionWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+          </details>}
+        </div>
+      )}
       {/* 主区横向行（M2-计划 D4）：滚动舞台 + 右侧可折叠搜索面板。
           面板是 viewer 内部布局，不动 shell 的右侧面板占位（留给 M5）。 */}
       <div className="viewer-main-row">
@@ -406,9 +414,9 @@ export function ViewerPage() {
           {status !== "ready" ? (
             <div className="viewer-state">
               {status === "idle" && (
-                <p className="viewer-empty">尚未打开文件——从首页「打开 PDF 文件」开始。</p>
+                <p className="viewer-empty">尚未打开文件——从首页「打开文档」开始。</p>
               )}
-              {status === "loading" && <p className="viewer-empty">正在装载文档…</p>}
+              {status === "loading" && <p className="viewer-empty">{tab.loadingStage ?? "正在装载文档…"}{tab.loadingProgress !== null && ` ${Math.round(tab.loadingProgress * 100)}%`}</p>}
               {status === "error" && (
                 <div className="viewer-error" role="alert">
                   <p>打开失败：{error ?? "未知错误"}</p>
@@ -455,7 +463,7 @@ export function ViewerPage() {
             </div>
           )}
         </div>
-        {searchPanelOpen && <SearchPanel />}
+        {searchPanelOpen && tab.sourceFormat === "pdf" && <SearchPanel />}
       </div>
     </div>
   );

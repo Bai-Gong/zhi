@@ -184,8 +184,8 @@ export function TabStrip() {
       <button
         type="button"
         className="tab-strip-new"
-        title="新建标签（打开 PDF 文件）"
-        aria-label="新建标签（打开 PDF 文件）"
+        title="新建标签（打开文档）"
+        aria-label="新建标签（打开文档）"
         onClick={handleNew}
       >
         <Plus size={14} aria-hidden />
