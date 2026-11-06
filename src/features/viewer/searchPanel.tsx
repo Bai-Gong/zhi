@@ -281,7 +281,7 @@ export function SearchPanel() {
           disabled={!readyTabId}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
               e.preventDefault();
               runNowRef.current?.();
             }
@@ -340,15 +340,21 @@ export function SearchPanel() {
           <p className="search-empty">输入关键词开始搜索；结果按页分组，点击可跳转定位。</p>
         ) : build ? null : !result || searching ? (
           <p className="search-empty">正在搜索…</p>
+        ) : result.complete && !result.hasText ? (
+          <p className="search-empty">
+            {scopeKind === "page" ? "当前页没有可搜索的文本" : "文档没有可搜索的文本"}，可能是扫描件或图片 PDF，需先进行文字识别。
+          </p>
         ) : result.hits.length === 0 ? (
           <p className="search-empty">
-            {scopeKind === "page" ? `第 ${scopePage} 页未找到「${trimmed}」。` : `未找到「${trimmed}」。`}
-            {caseSensitive ? " 可尝试关闭大小写开关。" : ""}
+            {!result.complete
+              ? "部分页面文本解析失败，已解析内容中未找到匹配；结果可能不全，请按 Enter 重试。"
+              : scopeKind === "page" ? `第 ${scopePage} 页未找到「${trimmed}」。` : `未找到「${trimmed}」。`}
+            {result.hasText && caseSensitive ? " 可尝试关闭大小写开关。" : ""}
           </p>
         ) : (
           <>
             {!result.complete && (
-              <p className="search-incomplete">索引未完整（范围内有页未能解析），结果可能不全。</p>
+              <p className="search-incomplete">索引未完整（范围内有页未能解析），结果可能不全，请按 Enter 重试。</p>
             )}
             {groups.map((group) => (
               <div key={group.pageNumber} className="search-group">

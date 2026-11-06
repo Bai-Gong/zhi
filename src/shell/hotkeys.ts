@@ -21,6 +21,7 @@ import { useUiStore } from "./uiStore";
 // 缩放档位/夹取是查看器域的唯一事实来源（pageGeometry，零依赖纯函数）。shell 反向
 // import features 的纯函数不违反 4.3 边界（规则限制的是组件与 pdfjs/store），而
 // 复制 1.1 / 0.25–4.0 魔数会让工具栏与快捷键步进漂移，危害更大。
+import { clearAutoFit } from "../features/viewer/scrollBridge";
 import { clampScale, ZOOM_STEP } from "../features/viewer/pageGeometry";
 
 /** 注入的导航器：即 react-router 的 navigate（AppShell 装配时提供）。 */
@@ -143,7 +144,7 @@ export function installHotkeys(navigate: HotkeyNavigator): () => void {
   // 判定，才能实现「先收选区、下一次 Esc 再退沉浸」的两段式；退出时 preventDefault，
   // 冒泡段的常规分发经 defaultPrevented 让位，同一键不双重处理。
   const onEscapeCapture = (event: KeyboardEvent): void => {
-    if (event.key !== "Escape" || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.isComposing || event.key !== "Escape" || event.ctrlKey || event.metaKey || event.altKey) return;
     const ui = useUiStore.getState();
     if (!ui.immersive) return;
     const selection = window.getSelection();
@@ -154,7 +155,7 @@ export function installHotkeys(navigate: HotkeyNavigator): () => void {
 
   // 常规分发走冒泡：晚于查看器滚动容器的翻页监听执行，defaultPrevented 即让位。
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.defaultPrevented) return;
+    if (event.defaultPrevented || event.isComposing) return;
     // Native macOS menus own these accelerators; do not dispatch twice.
     if (document.documentElement.dataset.nativeMaterial === "macos" && event.metaKey &&
         ["o", "w"].includes(event.key.toLowerCase())) return;
@@ -209,14 +210,17 @@ export function installHotkeys(navigate: HotkeyNavigator): () => void {
         case "=":
         case "+": // 主键盘 Shift+= 与小键盘 NumpadAdd 的 key 均为 "+"/"="
           event.preventDefault();
+          clearAutoFit();
           docStore.setScale(clampScale(session.scale * ZOOM_STEP));
           return;
         case "-":
           event.preventDefault();
+          clearAutoFit();
           docStore.setScale(clampScale(session.scale / ZOOM_STEP));
           return;
         case "0":
           event.preventDefault();
+          clearAutoFit();
           docStore.setScale(1);
           return;
         default:

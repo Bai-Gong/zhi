@@ -17,10 +17,11 @@ import { useSearchParams } from "react-router-dom";
 import { openDocument } from "../../core/document/openDocument";
 import { capScaleForRaster } from "../../core/document/renderQueue";
 import { useDocumentStore, activeTabOf, type PageSize } from "../../core/document/store";
+import { useImmersiveEdges } from "../../shell/useImmersiveEdges";
 import { useUiStore } from "../../shell/uiStore";
 import { clampScale, ZOOM_STEP } from "./pageGeometry";
 import { PageCanvas } from "./PageCanvas";
-import { registerFitWidthHandler } from "./scrollBridge";
+import { clearAutoFit, isAutoFit, registerFitWidthHandler, requestFitWidth } from "./scrollBridge";
 import { SearchHitLayer, SearchPanel, useSearchHitFocus } from "./searchPanel";
 import { TabStrip } from "./tabStrip";
 import { ViewerToolbar } from "./ViewerToolbar";
@@ -30,11 +31,6 @@ import "./viewer.css";
 const VIEWER_PADDING = 24;
 /** 当前页判定容差：视口顶边以下该像素内仍视为上一页贴边。 */
 const CURRENT_PAGE_TOLERANCE = 4;
-/** 沉浸边缘唤出阈值（T7）：与 AppShell 同款（顶缘 8px 唤出、越过 140px 收起）。
- *  两处各自持有一份常量是有意的——模块间不为共享一个小阈值增加耦合，改时同步。 */
-const IMMERSIVE_REVEAL_PX = 8;
-const IMMERSIVE_HIDE_PX = 140;
-
 export function ViewerPage() {
   const [params] = useSearchParams();
   const path = params.get("path");
@@ -58,28 +54,14 @@ export function ViewerPage() {
   const hitFocus = useSearchHitFocus();
 
   // 沉浸模式（M2 T7）：uiStore 会话级瞬态。shell 侧已隐藏顶栏/侧栏/右侧面板；
-  // 本页隐藏标签条与工具栏，鼠标移到窗口顶缘临时唤出（与 AppShell 同款阈值
-  // 联动，两侧独立判定、无共享状态）。
+  // 本页隐藏标签条与工具栏，鼠标移到窗口顶缘临时唤出（与 AppShell 共用边缘驻留和焦点保护逻辑）。
   const immersive = useUiStore((s) => s.immersive);
   // 画布反色（T7 / M2-计划 D8）：开关在工具栏，落点见下方 canvas-invert 同步效应。
   const canvasInvert = useUiStore((s) => s.canvasInvert);
   // 标签条（M2 T9）：无标签时不渲染（空态下孤零零一个「+」反而误导）。
   const tabCount = useDocumentStore((s) => s.tabs.length);
 
-  // 沉浸边缘唤出：只在沉浸期间挂 mousemove 监听，退出即复位（不留瞬态残留）。
-  const [immersivePeek, setImmersivePeek] = useState(false);
-  useEffect(() => {
-    if (!immersive) {
-      setImmersivePeek(false);
-      return;
-    }
-    const onMove = (event: MouseEvent) => {
-      if (event.clientY <= IMMERSIVE_REVEAL_PX) setImmersivePeek(true);
-      else if (event.clientY > IMMERSIVE_HIDE_PX) setImmersivePeek(false);
-    };
-    window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
-  }, [immersive]);
+  const immersivePeek = useImmersiveEdges(immersive);
   const chromeVisible = !immersive || immersivePeek;
 
   // 路由参数驱动装载（技术方案 5.1）：换文件或首次进入才装载；同路径标签已就绪
@@ -262,6 +244,7 @@ export function ViewerPage() {
             ? 100
             : 1;
       const steps = (-event.deltaY * unit) / 100;
+      clearAutoFit();
       const session = activeTabOf(useDocumentStore.getState());
       useDocumentStore.getState().setScale(clampScale(session.scale * Math.pow(ZOOM_STEP, steps)));
     };
@@ -274,8 +257,9 @@ export function ViewerPage() {
     const el = scrollRef.current;
     if (!el || !pageSizes) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
       const target = event.target instanceof Element ? event.target : null;
-      if (target && target.closest("input, textarea, [contenteditable='true']")) return;
+      if (target && target.closest("input, textarea, select, [contenteditable='true']")) return;
       const session = activeTabOf(useDocumentStore.getState());
       const max = Math.max(1, session.numPages);
       let destination: number;
@@ -353,6 +337,26 @@ export function ViewerPage() {
     });
   }, [pageSizes]);
 
+  // 归档方案的自动适应宽度：观察容器边框宽度，避开滚动条出现造成的反馈循环。
+  // 切换标签时清除模式，防止覆盖另一标签已保存的缩放比例。
+  useLayoutEffect(() => {
+    clearAutoFit();
+    return clearAutoFit;
+  }, [activeTabId]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !pageSizes) return;
+    let width = el.offsetWidth;
+    const observer = new ResizeObserver(() => {
+      const next = el.offsetWidth;
+      if (next === width) return;
+      width = next;
+      if (isAutoFit()) requestFitWidth();
+    });
+    observer.observe(el, { box: "border-box" });
+    return () => observer.disconnect();
+  }, [activeTabId, pageSizes]);
+
   // ===== 搜索命中跳转（M2-1）：面板发布聚焦 → 滚动到命中矩形上方约 1/3 视口处 =====
   // 命中矩形 top 是「页项内 CSS 偏移」（与页项 offsetTop 同基准），直接叠加即可；
   // 缩放后的重发布也会走到这里，命中持续保持在视口内。
@@ -371,8 +375,7 @@ export function ViewerPage() {
 
   return (
     <div className="viewer-page">
-      {/* 沉浸（T7）：标签条与工具栏一并隐藏，鼠标移到窗口顶缘临时唤出（与 AppShell
-          侧同款阈值联动）。「打开被拒」横幅是警报、搜索面板是阅读伴随工具——
+      {/* 沉浸（T7）：标签条与工具栏一并隐藏，鼠标移到窗口顶缘临时唤出（与 AppShell 共用边缘逻辑）。「打开被拒」横幅是警报、搜索面板是阅读伴随工具——
           不算界面骨架，沉浸下保持可见。 */}
       {chromeVisible && tabCount > 0 && <TabStrip />}
       {chromeVisible && <ViewerToolbar />}

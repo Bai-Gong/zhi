@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import { IconButton } from "../components/IconButton";
@@ -8,6 +8,7 @@ import { installNativeMenu } from "./nativeMenu";
 import { installHotkeys } from "./hotkeys";
 import { TopBar } from "./TopBar";
 import { ROUTES } from "./routes";
+import { useImmersiveEdges } from "./useImmersiveEdges";
 import { useUiStore } from "./uiStore";
 import "./theme.css";
 
@@ -24,18 +25,13 @@ function pageTitleOf(pathname: string): string {
   return PAGE_TITLES[pathname] ?? "百工·纸";
 }
 
-/** 沉浸模式边缘唤出阈值（T7）：顶缘 8px 内唤出；鼠标越过唤出后的界面高度再收起。 */
-const IMMERSIVE_REVEAL_PX = 8;
-/** 收起阈值 ≈ 顶栏 48 + 标签条 34 + 工具栏 42 + 余量；与 ViewerPage 侧常量保持一致。 */
-const IMMERSIVE_HIDE_PX = 140;
-
 /**
  * 四区布局（shell 模块）：顶栏 / 侧栏（仅查看器）/ 主区 / 右侧面板占位（仅查看器）。
  * 页面组装只在 shell 路由层完成（技术方案 4.3 规则 2）。
  *
  * 沉浸模式（M2 T7）：uiStore.immersive 为真时隐藏顶栏、侧栏与右侧面板（查看器内
- * 的标签条/工具栏由 ViewerPage 以同款阈值各自联动，两侧独立判定、无共享状态）；
- * 鼠标移到窗口顶缘临时唤出全部界面，移入内容区（>IMMERSIVE_HIDE_PX）自动收起；
+ * 的标签条/工具栏由 ViewerPage 使用相同边缘唤出逻辑）；
+ * 鼠标在顶缘或左缘驻留时唤出界面，离开界面后延迟收起，输入焦点保持时不收起；
  * Esc / Ctrl+I 退出（见 shell/hotkeys.ts）。
  */
 export function AppShell() {
@@ -51,21 +47,11 @@ export function AppShell() {
   useEffect(() => installHotkeys(navigate), [navigate]);
   useEffect(() => installNativeMenu(navigate), [navigate]);
 
-  // 沉浸边缘唤出：只在沉浸期间挂 mousemove 监听，退出即复位（不留瞬态残留）。
-  const [edgeRevealed, setEdgeRevealed] = useState(false);
+  const edgeRevealed = useImmersiveEdges(immersive && isViewer);
+  const chromeVisible = !immersive || !isViewer || edgeRevealed;
   useEffect(() => {
-    if (!immersive) {
-      setEdgeRevealed(false);
-      return;
-    }
-    const onMove = (event: MouseEvent) => {
-      if (event.clientY <= IMMERSIVE_REVEAL_PX) setEdgeRevealed(true);
-      else if (event.clientY > IMMERSIVE_HIDE_PX) setEdgeRevealed(false);
-    };
-    window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
-  }, [immersive]);
-  const chromeVisible = !immersive || edgeRevealed;
+    if (!isViewer && immersive) useUiStore.getState().setImmersive(false);
+  }, [isViewer, immersive]);
 
   // 路由驱动的窗口标题
   useEffect(() => {

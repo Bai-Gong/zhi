@@ -29,7 +29,7 @@ import { HOTKEY_LIST, closeTabAndSyncRoute, openPickedPdf } from "../../shell/ho
 import { buildEditUrl, buildOrganizeUrl } from "../../shell/routes";
 import { useUiStore } from "../../shell/uiStore";
 import { clampScale, ZOOM_STEP } from "./pageGeometry";
-import { requestFitWidth } from "./scrollBridge";
+import { clearAutoFit, requestFitWidth } from "./scrollBridge";
 
 /** 快捷键说明弹层的遮罩与面板样式。内联而非新建 CSS 文件：本任务授权清单只含
  *  新增 tabStrip.css，且弹层只有一个实例；颜色一律走主题变量（深色自动成立）。 */
@@ -138,7 +138,10 @@ export function ViewerToolbar() {
     }
   };
 
-  const zoomBy = (factor: number) => setScale(clampScale(scale * factor));
+  const zoomBy = (factor: number) => {
+    clearAutoFit();
+    setScale(clampScale(scale * factor));
+  };
 
   return (
     <div className="viewer-toolbar fang-glass-surface" role="toolbar" aria-label="查看器工具栏">

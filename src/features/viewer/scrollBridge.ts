@@ -4,6 +4,7 @@
 type FitWidthHandler = () => void;
 
 let fitWidthHandler: FitWidthHandler | null = null;
+let autoFit = false;
 
 /** 注册处理器；返回注销函数。 */
 export function registerFitWidthHandler(handler: FitWidthHandler): () => void {
@@ -15,5 +16,11 @@ export function registerFitWidthHandler(handler: FitWidthHandler): () => void {
 
 /** 请求按当前滚动容器与当前页宽度执行「适应宽度」缩放。 */
 export function requestFitWidth(): void {
+  autoFit = true;
   fitWidthHandler?.();
 }
+
+/** 手动缩放、切换标签或离开查看器时退出自动适应。 */
+export function clearAutoFit(): void { autoFit = false; }
+
+export function isAutoFit(): boolean { return autoFit; }

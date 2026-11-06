@@ -64,6 +64,8 @@ export interface SearchResult {
   hitPages: number;
   /** 范围内索引是否完整（false = 有页未建索引，结果可能不全）。 */
   complete: boolean;
+  /** 范围内已建索引是否含非空文本；无文本提示还须检查 complete。 */
+  hasText: boolean;
   /** 是否因命中数超出 MAX_TOTAL_HITS 而截断。 */
   truncated: boolean;
 }
@@ -71,7 +73,7 @@ export interface SearchResult {
 /** 全册命中上限：防御性截断（如单字母关键词在 500 页文档里的上万命中）。 */
 export const MAX_TOTAL_HITS = 2000;
 
-/** 单页构建失败不拖垮整册：该页按无文本落空，构建继续（详见构建循环注释）。 */
+/** 单页失败保留缺失状态，下次调用重试，其余页继续构建。 */
 export type TextIndexOutcome =
   | { status: "ready" }
   | { status: "cancelled" }
@@ -85,7 +87,7 @@ interface TabIndexCache {
   generation: number;
   numPages: number;
   pages: (PageTextIndex | null)[];
-  /** 已构建页数（含失败落空页；单页 ensure 不推进此口径）。 */
+  /** 成功构建页数（含单页 ensure；失败页不计入，后续调用重试）。 */
   builtCount: number;
   flight: BuildFlight | null;
 }
@@ -215,9 +217,8 @@ export function ensureTabTextIndex(params: {
     };
     try {
       let sliceStart = performance.now();
-      // 从已建高水位继续（上次构建被取消后可续建）；循环内跳过已被单页
-      // ensure 提前建好的页，保证 builtCount 单调且无重复解析。
-      for (let pageNumber = cache.builtCount + 1; pageNumber <= cache.numPages; pageNumber += 1) {
+      // 只补缺失页，保留成功页；成功页数不能作为页码高水位，否则会漏掉失败页。
+      for (let pageNumber = 1; pageNumber <= cache.numPages; pageNumber += 1) {
         if (isCacheStale(tabId, cache)) {
           finish();
           return { status: "cancelled" };
@@ -230,15 +231,20 @@ export function ensureTabTextIndex(params: {
               finish();
               return { status: "cancelled" };
             }
-            cache.pages[pageNumber - 1] = buildPageIndex(pageNumber, content.items);
+            if (!cache.pages[pageNumber - 1]) {
+              cache.pages[pageNumber - 1] = buildPageIndex(pageNumber, content.items);
+              cache.builtCount += 1;
+            }
           } catch (error) {
-            // 代际未变而取页/抽文本失败：单页落空（按无文本处理），
-            // 不让一页的损坏拖垮整册索引；真正换代的情况已在上方拦截。
+            // 失败页保持 null，结果标记不完整；下一次搜索可重试，不把失败当无文本。
             console.warn(`第 ${pageNumber} 页文本索引构建失败：`, error);
           }
         }
-        cache.builtCount = pageNumber;
-        notify(pageNumber);
+        if (isCacheStale(tabId, cache)) {
+          finish();
+          return { status: "cancelled" };
+        }
+        notify(cache.builtCount);
         if (performance.now() - sliceStart >= SLICE_BUDGET_MS) {
           await yieldToMain();
           sliceStart = performance.now();
@@ -289,7 +295,10 @@ export async function ensurePageTextIndex(tabId: string, pageNumber: number): Pr
     const proxy = await cache.doc.getPage(page);
     const content = await proxy.getTextContent();
     if (isCacheStale(tabId, cache)) return false;
-    if (!cache.pages[page - 1]) cache.pages[page - 1] = buildPageIndex(page, content.items);
+    if (!cache.pages[page - 1]) {
+      cache.pages[page - 1] = buildPageIndex(page, content.items);
+      cache.builtCount += 1;
+    }
     return true;
   } catch (error) {
     console.warn(`第 ${page} 页文本索引构建失败：`, error);
@@ -378,10 +387,13 @@ export function searchTextIndex(params: {
 
   const scopePage = scope.kind === "page" ? Math.min(Math.max(1, Math.round(scope.pageNumber)), cache.numPages) : 0;
   const complete =
-    scope.kind === "page" ? cache.pages[scopePage - 1] !== undefined : cache.builtCount >= cache.numPages;
+    scope.kind === "page" ? cache.pages[scopePage - 1] != null : cache.pages.every((page) => page !== null);
+  const hasText = scope.kind === "page"
+    ? Boolean(cache.pages[scopePage - 1]?.text.trim())
+    : cache.pages.some((page) => Boolean(page?.text.trim()));
 
   const needle = (caseSensitive ? query : foldText(query)).replace(/\n/g, " ");
-  const empty: SearchResult = { query, caseSensitive, scope, hits: [], hitPages: 0, complete, truncated: false };
+  const empty: SearchResult = { query, caseSensitive, scope, hits: [], hitPages: 0, complete, hasText, truncated: false };
   if (needle.length === 0) return empty;
 
   const from = scope.kind === "page" ? scopePage : 1;
@@ -411,7 +423,7 @@ export function searchTextIndex(params: {
     }
     if (truncated) break;
   }
-  return { query, caseSensitive, scope, hits, hitPages, complete, truncated };
+  return { query, caseSensitive, scope, hits, hitPages, complete, hasText, truncated };
 }
 
 /** 摘录窗口：命中前 24 字符、后 36 字符（肉眼定位够用，列表不换行爆版）。 */
